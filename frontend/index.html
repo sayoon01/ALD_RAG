@@ -2,74 +2,201 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>반도체 ALD RAG 챗봇</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <div class="app">
+    <div class="app-container">
+      <!-- 헤더 -->
       <header class="app-header">
-        <h1>반도체 ALD RAG 챗봇</h1>
-        <p class="subtitle">
-          ALD / 플라즈마 / MFC / 압력 등 반도체 공정 노트를 기반으로 답변해줘요.
-        </p>
+        <div class="header-content">
+          <div class="header-title">
+            <h1>🔬 반도체 ALD RAG 챗봇</h1>
+            <p class="subtitle">docs_ald.json + LLaMA 기반 반도체 공정 질의응답 시스템</p>
+          </div>
+          <div class="header-status">
+            <div class="status-pill" id="api-status">
+              <span class="status-dot"></span>
+              <span class="status-text">API 연결 확인 중...</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 시스템 정보 (MODEL_INFO 활용) -->
+        <div class="system-info" id="system-info" style="display: none;">
+          <div class="info-item">
+            <span class="info-label">Device:</span>
+            <span class="info-value" id="info-device">-</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">문서:</span>
+            <span class="info-value" id="info-docs">-</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">키워드:</span>
+            <span class="info-value" id="info-keywords">-</span>
+          </div>
+        </div>
       </header>
 
-      <main class="app-main">
-        <section class="chat-section">
-          <div class="chat-window" id="chat-window">
-            <!-- 메시지들이 JS로 들어갈 영역 -->
-          </div>
+      <!-- 메인 컨텐츠 -->
+      <div class="main-content">
+        <!-- 왼쪽: 옵션 -->
+        <aside class="sidebar">
+          <section class="panel panel-options">
+            <h2>⚙️ 질의 옵션</h2>
+            
+            <div class="options-grid">
+              <!-- 키워드 필터 -->
+              <div class="option-group">
+                <label for="keyword-select" class="option-label">
+                  <span>🔍 키워드 필터</span>
+                  <span class="tooltip-icon" title="특정 키워드의 문서만 검색합니다">ℹ️</span>
+                </label>
+                <select id="keyword-select" class="select-input">
+                  <option value="">(전체 키워드)</option>
+                </select>
+                <p class="option-hint">특정 키워드만 검색하려면 선택하세요</p>
+              </div>
 
-          <div class="chat-input-area">
-            <div class="param-row">
-              <label>
-                top_k
+              <!-- Top-k -->
+              <div class="option-group">
+                <label for="topk-input" class="option-label">
+                  <span>📊 Top-k 문장 수</span>
+                  <span class="badge badge-primary" id="topk-label">3</span>
+                </label>
                 <input
-                  type="number"
-                  id="top-k-input"
+                  type="range"
+                  id="topk-input"
+                  class="range-input"
                   min="1"
                   max="10"
                   value="3"
                 />
-              </label>
-              <label>
-                max_new_tokens
+                <div class="range-labels">
+                  <span>1</span>
+                  <span>10</span>
+                </div>
+                <p class="option-hint">검색해서 LLM에 전달할 문장 개수</p>
+              </div>
+
+              <!-- Max Tokens -->
+              <div class="option-group">
+                <label for="max-tokens-input" class="option-label">
+                  <span>📝 최대 생성 토큰</span>
+                  <span class="badge badge-primary" id="max-tokens-label">256</span>
+                </label>
                 <input
-                  type="number"
+                  type="range"
                   id="max-tokens-input"
-                  min="32"
-                  max="1024"
+                  class="range-input"
+                  min="64"
+                  max="512"
+                  step="32"
                   value="256"
                 />
-              </label>
-            </div>
+                <div class="range-labels">
+                  <span>64</span>
+                  <span>512</span>
+                </div>
+                <p class="option-hint">답변 길이 조절 (길수록 느림)</p>
+              </div>
 
-            <div class="input-row">
-              <textarea
-                id="question-input"
-                placeholder="질문을 입력하세요. (예: ALD 공정에서 purge 단계는 왜 필요한가?)"
-              ></textarea>
-              <button id="send-btn">질문 보내기</button>
+              <!-- 옵션 플래그 -->
+              <div class="option-group option-flags">
+                <label class="option-label">🎛️ 고급 옵션</label>
+                <div class="checkbox-group">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="context-only" />
+                    <span>컨텍스트만 보기</span>
+                    <span class="checkbox-hint">답변 생성 없이 검색 결과만</span>
+                  </label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="debug-flag" />
+                    <span>디버그 모드</span>
+                    <span class="checkbox-hint">백엔드 콘솔에 상세 로그 출력</span>
+                  </label>
+                </div>
+              </div>
             </div>
+          </section>
+        </aside>
 
-            <p id="status-text" class="status-text"></p>
+        <!-- 중앙: 질문 입력과 답변 나란히 -->
+        <main class="content-area">
+          <div class="chat-layout">
+            <!-- 왼쪽: 질문 입력 -->
+            <section class="panel panel-question">
+              <h2>💬 질문 입력</h2>
+              <div class="question-wrapper">
+                <textarea
+                  id="question"
+                  class="question-input"
+                  placeholder="예) ALD에서 Purge 단계는 왜 중요한가요?&#10;예) MFC에 이상이 생기면 어떤 징후로 확인할 수 있어?&#10;예) VG12와 VG13의 차이는?"
+                  rows="8"
+                ></textarea>
+                <div class="question-footer">
+                  <button id="send-btn" class="btn-primary">
+                    <span class="btn-icon">🚀</span>
+                    <span class="btn-text">질문 보내기</span>
+                  </button>
+                  <div class="question-hints">
+                    <span class="hint-text">⌘+Enter / Ctrl+Enter로 전송</span>
+                  </div>
+                </div>
+                <div id="info-line" class="info-line"></div>
+              </div>
+            </section>
+
+            <!-- 오른쪽: 모델 답변 -->
+            <section class="panel panel-answer">
+              <div class="panel-header">
+                <h2>🤖 모델 답변</h2>
+                <button id="clear-answer-btn" class="btn-ghost">
+                  <span>🗑️</span> 지우기
+                </button>
+              </div>
+              <div id="answer" class="answer-content">
+                <div class="empty-state">
+                  <div class="empty-icon">💭</div>
+                  <p>왼쪽에 질문을 입력하고 전송 버튼을 눌러주세요.</p>
+                </div>
+              </div>
+            </section>
           </div>
-        </section>
 
-        <section class="context-section">
-          <h2>RAG 컨텍스트</h2>
-          <p class="context-desc">
-            이번 답변에서 참고한 노트 문장들이에요. score가 높을수록 질문과 더 유사한 문장입니다.
-          </p>
-          <ul id="context-list" class="context-list">
-            <!-- JS로 컨텍스트 리스트 채워짐 -->
-          </ul>
-        </section>
-      </main>
+          <!-- 컨텍스트 영역 -->
+          <section class="panel panel-context">
+            <div class="panel-header">
+              <h2>📚 참고한 컨텍스트</h2>
+              <span id="context-count" class="badge badge-info">0 개</span>
+            </div>
+            <div id="contexts" class="context-content">
+              <div class="empty-state">
+                <div class="empty-icon">📄</div>
+                <p>검색된 컨텍스트가 여기에 표시됩니다.</p>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
 
-      <footer class="app-footer">
-        <span>GPU 서버: spark-005c · Backend: FastAPI + LLaMA · Frontend: vanilla JS</span>
-      </footer>
+      <!-- 하단: 키워드 통계 -->
+      <section class="panel panel-stats">
+        <div class="stats-header">
+          <h2>📊 키워드 통계</h2>
+          <button id="refresh-stats-btn" class="btn-ghost-small" title="통계 새로고침">
+            🔄
+          </button>
+        </div>
+        <div id="keyword-stats" class="stats-content">
+          <div class="loading-state">
+            <div class="spinner"></div>
+            <p>키워드 통계를 불러오는 중...</p>
+          </div>
+        </div>
+      </section>
     </div>
 
     <script src="main.js"></script>
