@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>반도체 ALD RAG 챗봇</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="app-header">
+        <h1>반도체 ALD RAG 챗봇</h1>
+        <p class="subtitle">
+          ALD / 플라즈마 / MFC / 압력 등 반도체 공정 노트를 기반으로 답변해줘요.
+        </p>
+      </header>
+
+      <main class="app-main">
+        <section class="chat-section">
+          <div class="chat-window" id="chat-window">
+            <!-- 메시지들이 JS로 들어갈 영역 -->
+          </div>
+
+          <div class="chat-input-area">
+            <div class="param-row">
+              <label>
+                top_k
+                <input
+                  type="number"
+                  id="top-k-input"
+                  min="1"
+                  max="10"
+                  value="3"
+                />
+              </label>
+              <label>
+                max_new_tokens
+                <input
+                  type="number"
+                  id="max-tokens-input"
+                  min="32"
+                  max="1024"
+                  value="256"
+                />
+              </label>
+            </div>
+
+            <div class="input-row">
+              <textarea
+                id="question-input"
+                placeholder="질문을 입력하세요. (예: ALD 공정에서 purge 단계는 왜 필요한가?)"
+              ></textarea>
+              <button id="send-btn">질문 보내기</button>
+            </div>
+
+            <p id="status-text" class="status-text"></p>
+          </div>
+        </section>
+
+        <section class="context-section">
+          <h2>RAG 컨텍스트</h2>
+          <p class="context-desc">
+            이번 답변에서 참고한 노트 문장들이에요. score가 높을수록 질문과 더 유사한 문장입니다.
+          </p>
+          <ul id="context-list" class="context-list">
+            <!-- JS로 컨텍스트 리스트 채워짐 -->
+          </ul>
+        </section>
+      </main>
+
+      <footer class="app-footer">
+        <span>GPU 서버: spark-005c · Backend: FastAPI + LLaMA · Frontend: vanilla JS</span>
+      </footer>
+    </div>
+
+    <script src="main.js"></script>
+  </body>
+</html>

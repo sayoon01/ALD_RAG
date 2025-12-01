@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+
+# 가상환경
+torch-env/
+.venv/
+venv/
+
+# 캐시, 모델, 토큰 등
+.cache/
+huggingface/
+*.safetensors
+*.bin
+
+# 에디터/OS 관련
+.DS_Store
+.idea/
+.vscode/
