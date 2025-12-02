@@ -27,15 +27,15 @@ DOCS_PATH = BASE_DIR / "docs" / "docs_ald.json"
 # 1) 파일 유틸
 # ==============================
 
-def load_raw_docs() -> Dict[str, List[Dict[str, str]]]:
+def load_raw_docs() -> List[Dict[str, Any]]:
     """
-    docs_ald.json을 읽어서 키워드별 그룹화된 구조를 반환.
-    - 새 포맷: { "documents": {"ALD": [{"text": "..."}, ...], ...} }
-    - 기존 포맷 호환: { "documents": [{"keyword": "ALD", "text": "..."}, ...] }
+    docs_ald.json을 읽어서 리스트 구조를 반환.
+    - 새 포맷: { "documents": [{"id": 1, "keywords": ["ALD"], "text": "..."}, ...] }
+    - 기존 포맷 호환 지원
     """
     if not DOCS_PATH.exists():
         print(f"[WARN] {DOCS_PATH} 가 아직 없음. 새로 생성할 예정.")
-        return {}
+        return []
 
     with DOCS_PATH.open("r", encoding="utf-8") as f:
         data = json.load(f)
@@ -43,51 +43,66 @@ def load_raw_docs() -> Dict[str, List[Dict[str, str]]]:
     if isinstance(data, dict) and "documents" in data:
         documents = data["documents"]
         
-        # 새 구조 (키워드별 그룹화)
-        if isinstance(documents, dict):
+        # 새 구조 (리스트 형태)
+        if isinstance(documents, list):
             return documents
         
-        # 기존 구조 (리스트) - 새 구조로 변환
-        elif isinstance(documents, list):
-            grouped: Dict[str, List[Dict[str, str]]] = {}
-            for item in documents:
-                if not isinstance(item, dict):
+        # 기존 구조 (키워드별 그룹화) - 새 구조로 변환
+        elif isinstance(documents, dict):
+            result = []
+            next_id = 1
+            for keyword, text_list in documents.items():
+                if not isinstance(text_list, list):
                     continue
-                keyword = str(item.get("keyword", "unknown")).strip() or "unknown"
-                text = str(item.get("text", "")).strip()
-                if not text:
-                    continue
-                if keyword not in grouped:
-                    grouped[keyword] = []
-                grouped[keyword].append({"text": text})
-            return grouped
+                for item in text_list:
+                    if isinstance(item, dict):
+                        text = str(item.get("text", "")).strip()
+                    elif isinstance(item, str):
+                        text = item.strip()
+                    else:
+                        continue
+                    if not text:
+                        continue
+                    result.append({
+                        "id": next_id,
+                        "keywords": [keyword],
+                        "text": text
+                    })
+                    next_id += 1
+            return result
 
-    print("[WARN] docs_ald.json 구조가 예상과 다름. 빈 dict 반환.")
-    return {}
+    print("[WARN] docs_ald.json 구조가 예상과 다름. 빈 리스트 반환.")
+    return []
 
 
-def save_raw_docs(docs: Dict[str, List[Dict[str, str]]]) -> None:
+def save_raw_docs(docs: List[Dict[str, Any]]) -> None:
     """
-    키워드별 그룹화된 구조로 저장:
+    리스트 구조로 저장:
     {
-      "documents": {
-        "ALD": [{"text": "..."}, ...],
-        "Precursor": [{"text": "..."}, ...],
+      "documents": [
+        {"id": 1, "keywords": ["ALD"], "text": "..."},
         ...
-      }
+      ]
     }
     """
     DOCS_PATH.parent.mkdir(exist_ok=True, parents=True)
     wrapper = {"documents": docs}
-    total_count = sum(len(texts) for texts in docs.values())
     with DOCS_PATH.open("w", encoding="utf-8") as f:
         json.dump(wrapper, f, ensure_ascii=False, indent=2)
-    print(f"[INFO] 저장 완료: {DOCS_PATH} (총 {total_count} 문장, {len(docs)} 키워드)")
+    print(f"[INFO] 저장 완료: {DOCS_PATH} (총 {len(docs)} 문서)")
 
 
-def get_next_id(docs: Dict[str, List[Dict[str, str]]]) -> int:
-    """ID는 더 이상 사용하지 않지만 호환성을 위해 유지"""
-    return 1
+def get_next_id(docs: List[Dict[str, Any]]) -> int:
+    """다음 ID 번호 계산"""
+    max_id = 0
+    for item in docs:
+        try:
+            item_id = int(item.get("id", 0))
+            if item_id > max_id:
+                max_id = item_id
+        except (ValueError, TypeError):
+            continue
+    return max_id + 1
 
 
 # ==============================
@@ -104,10 +119,23 @@ def run_stats():
         print("[stats] 문서가 비어 있음.")
         return
 
+    # 키워드별 카운트
+    keyword_counts: Dict[str, int] = {}
+    for item in docs:
+        keywords = item.get("keywords", [])
+        if isinstance(keywords, list):
+            for kw in keywords:
+                kw = str(kw).strip()
+                if kw:
+                    keyword_counts[kw] = keyword_counts.get(kw, 0) + 1
+        elif isinstance(keywords, str):
+            kw = keywords.strip()
+            if kw:
+                keyword_counts[kw] = keyword_counts.get(kw, 0) + 1
+
     print("\n[키워드 통계] (docs_ald.json 기준)")
-    for kw in sorted(docs.keys()):
-        count = len(docs[kw])
-        print(f"- {kw}: {count} 문장")
+    for kw in sorted(keyword_counts.keys()):
+        print(f"- {kw}: {keyword_counts[kw]} 문장")
 
 
 # ==============================
@@ -127,25 +155,41 @@ def run_group():
         print("[group] 문서가 비어 있음.")
         return
 
+    # 키워드별로 그룹화
+    grouped: Dict[str, List[Dict[str, Any]]] = {}
+    for item in docs:
+        keywords = item.get("keywords", [])
+        if isinstance(keywords, list):
+            for kw in keywords:
+                kw = str(kw).strip()
+                if kw:
+                    if kw not in grouped:
+                        grouped[kw] = []
+                    grouped[kw].append(item)
+        elif isinstance(keywords, str):
+            kw = keywords.strip()
+            if kw:
+                if kw not in grouped:
+                    grouped[kw] = []
+                grouped[kw].append(item)
+
     print("\n" + "=" * 80)
     print("[키워드별 문서 그룹]")
     print("=" * 80)
 
-    total_count = 0
-    for kw in sorted(docs.keys()):
-        items = docs[kw]
-        total_count += len(items)
+    total_count = len(docs)
+    for kw in sorted(grouped.keys()):
+        items = grouped[kw]
         print(f"\n📌 keyword = {kw} ({len(items)}개)")
         print("-" * 80)
         for idx, item in enumerate(items, 1):
-            if isinstance(item, dict):
-                text = item.get("text", "").strip()
-            else:
-                text = str(item).strip()
-            print(f"  {idx}. {text}")
+            text = str(item.get("text", "")).strip()
+            item_id = item.get("id", "?")
+            keywords_str = ", ".join(item.get("keywords", [])) if isinstance(item.get("keywords"), list) else str(item.get("keywords", ""))
+            print(f"  {idx}. [ID:{item_id}] [{keywords_str}] {text}")
     
     print("\n" + "=" * 80)
-    print(f"총 {total_count}개 문서, {len(docs)}개 키워드")
+    print(f"총 {total_count}개 문서, {len(grouped)}개 키워드")
     print("=" * 80)
 
 
@@ -166,18 +210,23 @@ def run_add(keyword: str, text: str):
         print("[ERROR] 키워드와 문장은 비어있으면 안 됨.")
         return
 
-    # 키워드가 없으면 새로 생성
-    if keyword not in docs:
-        docs[keyword] = []
+    # 키워드를 배열로 변환 (쉼표로 구분된 경우 처리)
+    keywords_list = [kw.strip() for kw in keyword.split(",") if kw.strip()]
 
     # 새 항목 추가
-    docs[keyword].append({"text": text})
+    next_id = get_next_id(docs)
+    new_item = {
+        "id": next_id,
+        "keywords": keywords_list,
+        "text": text
+    }
+    docs.append(new_item)
     save_raw_docs(docs)
 
     print("\n[추가된 항목]")
-    print(f"- keyword : {keyword}")
+    print(f"- id      : {next_id}")
+    print(f"- keywords: {', '.join(keywords_list)}")
     print(f"- text    : {text}")
-    print(f"- 총 {len(docs[keyword])}개 항목 (키워드 '{keyword}' 기준)")
 
 
 # ==============================

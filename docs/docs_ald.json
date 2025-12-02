@@ -1,84 +1,479 @@
 {
   "documents": [
     {
-      "keyword": "ALD",
+      "id": 1,
+      "keywords": ["ALD"],
+      "text": "ALD 공정은 self-limiting 메커니즘을 기반으로 하여 박막 두께를 정밀하게 제어할 수 있는 증착 기술이다."
+    },
+    {
+      "id": 2,
+      "keywords": ["Precursor"],
+      "text": "Precursor는 기판 표면의 활성 사이트와 선택적으로 반응하여 초기 박막 형성 특성을 결정한다."
+    },
+    {
+      "id": 3,
+      "keywords": ["Purge"],
+      "text": "Purge 단계는 챔버 내부의 잔류 반응물과 부산물을 제거하여 다음 반응이 오염 없이 진행되도록 보장한다."
+    },
+    {
+      "id": 4,
+      "keywords": ["Plasma"],
+      "text": "Plasma는 라디칼 기반 반응성을 제공하여 낮은 온도에서도 안정적인 박막 형성이 가능하게 한다."
+    },
+    {
+      "id": 5,
+      "keywords": ["MFC"],
+      "text": "MFC는 공정 가스의 유량을 정밀하게 제어하며 실제 유량 변화는 안정적인 ALD 반응성에 직접적인 영향을 준다."
+    },
+    {
+      "id": 6,
+      "keywords": ["Flow"],
+      "text": "가스 Flow는 Precursor 전달 효율과 챔버 내 반응 균일도에 핵심적인 역할을 한다."
+    },
+    {
+      "id": 7,
+      "keywords": ["Pressure"],
+      "text": "챔버 Pressure는 반응 속도와 Precursor 확산 특성에 큰 영향을 미치며 공정 안정성을 좌우한다."
+    },
+    {
+      "id": 8,
+      "keywords": ["ALD", "Precursor"],
+      "text": "ALD 공정에서 Precursor의 표면 흡착 특성은 self-limiting 성장 메커니즘의 핵심이며 반응 균일도를 결정한다."
+    },
+    {
+      "id": 9,
+      "keywords": ["ALD", "Purge"],
+      "text": "ALD 공정의 Purge는 잔여 가스를 완전히 제거하여 반응 간 중첩을 방지함으로써 공정 반복성을 확보한다."
+    },
+    {
+      "id": 10,
+      "keywords": ["ALD", "Plasma"],
+      "text": "Plasma ALD는 라디칼 반응성을 활용해 thermal ALD보다 낮은 온도에서 높은 성장률을 확보한다."
+    },
+    {
+      "id": 11,
+      "keywords": ["ALD", "MFC"],
+      "text": "ALD 공정에서 MFC의 응답 속도는 Precursor 주입 profile을 결정하며 압력 overshoot 발생 여부에 영향을 준다."
+    },
+    {
+      "id": 12,
+      "keywords": ["ALD", "Flow"],
+      "text": "ALD에서 Flow 안정성은 Precursor 충전 단계의 균일도를 확보하기 위해 필수적이다."
+    },
+    {
+      "id": 13,
+      "keywords": ["ALD", "Pressure"],
+      "text": "ALD Pressure 제어는 성장률(GPC)의 일관성 확보에 중요한 변수로 작용한다."
+    },
+    {
+      "id": 14,
+      "keywords": ["Precursor", "Purge"],
+      "text": "Precursor 반응 후 Purge가 불충분하면 잔류 Precursor가 다음 반응 단계에서 원치 않는 CVD 반응을 유발할 수 있다."
+    },
+    {
+      "id": 15,
+      "keywords": ["Precursor", "Plasma"],
+      "text": "Plasma는 Precursor 분해 경로를 활성화하여 더 높은 반응성을 제공하고 박막 조성을 세밀하게 제어할 수 있게 한다."
+    },
+    {
+      "id": 16,
+      "keywords": ["Precursor", "MFC"],
+      "text": "Precursor 공급을 위한 MFC의 안정성은 기화 효율 및 챔버 내 전달 농도에 직접적인 영향을 준다."
+    },
+    {
+      "id": 17,
+      "keywords": ["Precursor", "Flow"],
+      "text": "Precursor Flow가 불안정하면 표면 포화가 제대로 이루어지지 않아 성장률 변동이 발생한다."
+    },
+    {
+      "id": 18,
+      "keywords": ["Precursor", "Pressure"],
+      "text": "Precursor 주입 시 Pressure overshoot는 주입 속도가 지나치게 빠르거나 밸브 지연으로 인해 발생할 수 있다."
+    },
+    {
+      "id": 19,
+      "keywords": ["Purge", "Plasma"],
+      "text": "Purge 후 Plasma가 적용되면 표면의 잔여 불순물을 제거하여 다음 사이클의 반응성을 향상시킨다."
+    },
+    {
+      "id": 20,
+      "keywords": ["Purge", "MFC"],
+      "text": "Purge 단계의 MFC 유량 제어가 느리면 잔여 가스 제거 효율이 떨어져 공정 repeatability가 낮아진다."
+    },
+    {
+      "id": 21,
+      "keywords": ["Purge", "Flow"],
+      "text": "효율적인 Purge Flow는 챔버 내 데드존(dead-zone)을 최소화하여 잔류 가스 제거 품질을 높인다."
+    },
+    {
+      "id": 22,
+      "keywords": ["Purge", "Pressure"],
+      "text": "Purge 압력이 낮으면 배기 효율이 떨어져 Precursor 중첩 반응 가능성이 증가한다."
+    },
+    {
+      "id": 23,
+      "keywords": ["Plasma", "MFC"],
+      "text": "Plasma 공정에서 MFC Flow 변동은 라디칼 밀도 변화를 초래하여 막 조성 균일도에 영향을 준다."
+    },
+    {
+      "id": 24,
+      "keywords": ["Plasma", "Flow"],
+      "text": "Plasma 반응 시 Flow 안정성은 라디칼 생성량을 일정하게 유지하는 데 필요하다."
+    },
+    {
+      "id": 25,
+      "keywords": ["Plasma", "Pressure"],
+      "text": "Plasma Pressure 제어는 전자 밀도와 라디칼 활성도를 결정하여 반응성에 직접적인 영향을 준다."
+    },
+    {
+      "id": 26,
+      "keywords": ["ALD"],
       "text": "ALD 공정은 Precursor A와 B를 번갈아 주입해 원자층 단위로 박막을 쌓는 공정이다."
     },
     {
-      "keyword": "ALD",
+      "id": 27,
+      "keywords": ["ALD"],
       "text": "ALD는 Surface self-limiting 반응을 이용해 한 사이클당 일정 두께만큼만 증착된다."
     },
     {
-      "keyword": "ALD",
+      "id": 28,
+      "keywords": ["ALD"],
       "text": "ALD 공정 조건은 시간 제어보다 표면 반응 특성에 의해 결정된다."
     },
     {
-      "keyword": "Precursor",
+      "id": 29,
+      "keywords": ["Precursor"],
       "text": "Precursor는 박막을 만들기 위한 원재료 기체이다."
     },
     {
-      "keyword": "Precursor",
+      "id": 30,
+      "keywords": ["Precursor"],
       "text": "Precursor A는 웨이퍼 표면에 한 층만 흡착되면 반응이 멈춘다."
     },
     {
-      "keyword": "Purge",
+      "id": 31,
+      "keywords": ["Purge"],
       "text": "Purge는 챔버 내부의 남아있는 기체를 제거하는 정리 단계이다."
     },
     {
-      "keyword": "Purge",
+      "id": 32,
+      "keywords": ["Purge"],
       "text": "Purge는 A와 B가 공중에서 섞여 이상 반응을 일으키지 않도록 한다."
     },
     {
-      "keyword": "플라즈마",
+      "id": 33,
+      "keywords": ["플라즈마"],
       "text": "플라즈마 ALD는 라디칼을 이용해 낮은 온도에서도 높은 반응성을 확보한다."
     },
     {
-      "keyword": "플라즈마",
+      "id": 34,
+      "keywords": ["플라즈마"],
       "text": "플라즈마를 사용하면 박막 밀도와 특성이 향상된다."
     },
     {
-      "keyword": "MFC",
+      "id": 35,
+      "keywords": ["MFC"],
       "text": "MFC는 가스 유량을 정밀하게 제어하는 장치이다."
     },
     {
-      "keyword": "Flow",
+      "id": 36,
+      "keywords": ["Flow"],
       "text": "유량은 sccm 단위로 표시되며 가스가 흐르는 양을 의미한다."
     },
     {
-      "keyword": "Flow",
+      "id": 37,
+      "keywords": ["Flow"],
       "text": "유량 Set 대비 실제 유량 오차가 크면 MFC 이상을 의심할 수 있다."
     },
     {
-      "keyword": "압력",
+      "id": 38,
+      "keywords": ["압력"],
       "text": "APC 밸브는 챔버 압력을 일정하게 유지하기 위해 열리고 닫힌다."
     },
     {
-      "keyword": "압력",
+      "id": 39,
+      "keywords": ["압력"],
       "text": "압력 Overshoot는 가스가 과도하게 주입되거나 APC 제어가 늦어 발생한다."
     },
     {
-      "keyword": "챔버",
+      "id": 40,
+      "keywords": ["챔버"],
       "text": "챔버는 반도체 공정이 실제로 일어나는 밀폐된 공간이다."
     },
     {
-      "keyword": "VG12",
+      "id": 41,
+      "keywords": ["VG12"],
       "text": "VG12는 공정 챔버의 실제 압력을 측정하는 진공 게이지이다."
     },
     {
-      "keyword": "VG13",
+      "id": 42,
+      "keywords": ["VG13"],
       "text": "VG13은 로드락 또는 전단부 압력을 측정하는 센서이다."
     },
     {
-      "keyword": "로드락",
+      "id": 43,
+      "keywords": ["로드락"],
       "text": "로드락 챔버는 웨이퍼를 외부에서 내부로 이동시키기 위한 진공 전환 공간이다."
     },
     {
-      "keyword": "Valve",
+      "id": 44,
+      "keywords": ["Valve"],
       "text": "Valve stuck-open 패턴은 밸브가 닫히지 않고 계속 열린 상태로 고착된 상황이다."
     },
     {
-      "keyword": "웨이퍼",
+      "id": 45,
+      "keywords": ["웨이퍼"],
       "text": "반도체 웨이퍼는 여러 공정을 반복해 회로를 형성하는 얇은 실리콘 판이다."
+    },
+    {
+      "id": 46,
+      "keywords": ["MFC", "Flow"],
+      "text": "MFC는 설정된 Flow 값에 도달하기까지의 응답 속도(response time)가 빠를수록 ALD 공정 내 압력 안정화가 용이해진다."
+    },
+    {
+      "id": 47,
+      "keywords": ["MFC", "Pressure"],
+      "text": "MFC 오작동으로 유량이 불안정하면 챔버 Pressure 패턴이 흔들리며 성장률(GPC) 변동의 주요 원인이 된다."
+    },
+    {
+      "id": 48,
+      "keywords": ["Flow", "Pressure"],
+      "text": "Flow가 급격하게 증가하면 Pressure overshoot가 발생하여 Precursor 흡착 균일도가 저하될 수 있다."
+    },
+    {
+      "id": 49,
+      "keywords": ["ALD", "Precursor", "Purge"],
+      "text": "ALD 사이클에서 Precursor 주입 후 Purge가 충분히 수행되지 않으면 self-limiting 반응 조건이 무너져 성장률 일관성이 떨어진다."
+    },
+    {
+      "id": 50,
+      "keywords": ["ALD", "Precursor", "Plasma"],
+      "text": "Plasma ALD에서는 Precursor 표면 반응 후 라디칼 활성화가 추가되어 낮은 온도에서도 높은 반응율을 구현한다."
+    },
+    {
+      "id": 51,
+      "keywords": ["ALD", "Precursor", "MFC"],
+      "text": "ALD에서 Precursor 공급용 MFC의 정확도는 챔버 내 분압을 결정하며 반응 포화 여부에 직접적으로 영향을 준다."
+    },
+    {
+      "id": 52,
+      "keywords": ["ALD", "Precursor", "Flow"],
+      "text": "Precursor Flow가 부족하면 포화 흡착이 이루어지지 않아 self-limiting ALD의 장점이 사라지게 된다."
+    },
+    {
+      "id": 53,
+      "keywords": ["ALD", "Precursor", "Pressure"],
+      "text": "Precursor 주입 순간 Pressure 상승 패턴은 라인 오염 여부나 기화 효율 확인에 중요한 진단 지표다."
+    },
+    {
+      "id": 54,
+      "keywords": ["ALD", "Purge", "Plasma"],
+      "text": "Plasma ALD에서는 Purge가 불완전하면 라디칼과 잔류 Precursor가 예상치 못한 side-reaction을 발생시킬 수 있다."
+    },
+    {
+      "id": 55,
+      "keywords": ["ALD", "Purge", "MFC"],
+      "text": "ALD Purge 단계에서 MFC의 배기 유량 반응성이 느리면 cycle 간 반복성이 크게 떨어진다."
+    },
+    {
+      "id": 56,
+      "keywords": ["ALD", "Purge", "Flow"],
+      "text": "Purge Flow가 최적값보다 낮으면 데드존에서 잔류 가스가 남아 성장 두께 균일도를 해친다."
+    },
+    {
+      "id": 57,
+      "keywords": ["ALD", "Purge", "Pressure"],
+      "text": "Purge 중 Pressure 변동이 크면 챔버 내 잔여 반응물이 완전히 제거되지 않았다는 신호일 가능성이 높다."
+    },
+    {
+      "id": 58,
+      "keywords": ["ALD", "Plasma", "MFC"],
+      "text": "Plasma ALD에서 MFC 흐름 안정성은 라디칼 밀도 균일도와 박막 조성 제어에 매우 중요한 요소다."
+    },
+    {
+      "id": 59,
+      "keywords": ["ALD", "Plasma", "Flow"],
+      "text": "Plasma 모드에서는 Flow 변화가 라디칼 생성 속도와 전자 밀도에 직접적인 영향을 준다."
+    },
+    {
+      "id": 60,
+      "keywords": ["ALD", "Plasma", "Pressure"],
+      "text": "Plasma Pressure 조건은 sheath 전계 형성과 이온 충돌 에너지에 영향을 주어 박막 구조 품질을 좌우한다."
+    },
+    {
+      "id": 61,
+      "keywords": ["ALD", "MFC", "Flow"],
+      "text": "ALD 공정에서 MFC Flow 튜닝은 챔버 압력 안정화 속도와 Precursor 포화 효율을 결정한다."
+    },
+    {
+      "id": 62,
+      "keywords": ["ALD", "MFC", "Pressure"],
+      "text": "MFC 유량 변동이 크면 ALD 압력 패턴이 흐트러져 cycle 간 반응 재현성이 크게 떨어진다."
+    },
+    {
+      "id": 63,
+      "keywords": ["ALD", "Flow", "Pressure"],
+      "text": "Flow와 Pressure는 ALD 반응 속도를 결정하는 주요 변수로, 두 값의 연동 제어가 필수적이다."
+    },
+    {
+      "id": 64,
+      "keywords": ["Precursor", "Purge", "Plasma"],
+      "text": "Precursor 반응 잔여물이 Purge에서 충분히 제거되지 않으면 Plasma와 반응해 예기치 않은 박막 화학 조성이 나타날 수 있다."
+    },
+    {
+      "id": 65,
+      "keywords": ["Precursor", "Purge", "MFC"],
+      "text": "Purge 단계의 MFC 제어가 불안정하면 Precursor 제거 효율이 떨어져 후속 반응에서 CVD 성분이 발생한다."
+    },
+    {
+      "id": 66,
+      "keywords": ["Precursor", "Purge", "Flow"],
+      "text": "Purge Flow가 낮을 경우 Precursor 분자들이 챔버 벽면에 남아 contamination을 유발한다."
+    },
+    {
+      "id": 67,
+      "keywords": ["Precursor", "Purge", "Pressure"],
+      "text": "Purge Pressure가 낮으면 잔류 Precursor가 완전히 제거되지 않아 반응 중첩 문제가 발생한다."
+    },
+    {
+      "id": 68,
+      "keywords": ["Precursor", "Plasma", "MFC"],
+      "text": "Precursor 공급 MFC의 안정성은 Plasma 반응 중 생성되는 라디칼 농도 균일성에도 영향을 준다."
+    },
+    {
+      "id": 69,
+      "keywords": ["Precursor", "Plasma", "Flow"],
+      "text": "Plasma와 함께 사용할 때 Precursor Flow는 분해 경로 및 라디칼 반응 비율에 영향을 준다."
+    },
+    {
+      "id": 70,
+      "keywords": ["Precursor", "Plasma", "Pressure"],
+      "text": "Plasma 조건의 Pressure는 Precursor의 물리적 흡착 상태와 분해 반응의 활성화를 동시에 조절한다."
+    },
+    {
+      "id": 71,
+      "keywords": ["Purge", "Plasma", "MFC"],
+      "text": "Plasma 공정에서 Purge 중 MFC 유량이 흔들리면 라디칼과 잔류 가스가 혼합되어 비의도적 박막 조성이 형성될 수 있다."
+    },
+    {
+      "id": 72,
+      "keywords": ["Purge", "Plasma", "Flow"],
+      "text": "Purge Flow가 일정하지 않으면 Plasma 라디칼과 잔류 Precursor가 반응하여 박막 내 불순물이 증가한다."
+    },
+    {
+      "id": 73,
+      "keywords": ["Purge", "Plasma", "Pressure"],
+      "text": "Purge 단계의 Pressure가 안정되지 않으면 Plasma의 이온 에너지가 변동하며 표면 반응 일관성이 무너진다."
+    },
+    {
+      "id": 74,
+      "keywords": ["Plasma", "MFC", "Flow"],
+      "text": "Plasma 반응 중 MFC Flow의 미세한 변화도 전자밀도 변화를 유발하여 박막 성장률에 민감하게 작용한다."
+    },
+    {
+      "id": 75,
+      "keywords": ["Plasma", "MFC", "Pressure"],
+      "text": "Plasma 조건에서 Pressure가 흔들리면 라디칼 생성 효율이 떨어지고 표면 활성화가 일정하게 유지되지 않는다."
+    },
+    {
+      "id": 76,
+      "keywords": ["Plasma", "Flow", "Pressure"],
+      "text": "Flow와 Pressure 조합은 Plasma의 sheath 형성과 이온 충돌 에너지 분포를 결정하는 핵심 요인이다."
+    },
+    {
+      "id": 77,
+      "keywords": ["MFC", "Flow", "Pressure"],
+      "text": "MFC의 Flow 안정성은 챔버 Pressure 패턴과 직결되며, 미세한 편차도 ALD 사이클 간 반응 재현성에 영향을 준다."
+    },
+    {
+      "id": 78,
+      "keywords": ["ALD", "Precursor", "Purge", "Plasma"],
+      "text": "Plasma ALD에서 Precursor 주입 후 Purge가 부족하면 라디칼과 과반응하여 비정상적인 화학 결합 구조가 생성된다."
+    },
+    {
+      "id": 79,
+      "keywords": ["ALD", "Precursor", "Purge", "MFC"],
+      "text": "ALD에서 Precursor와 Purge 유량을 제어하는 MFC 품질은 성장률 안정성과 박막 결함 수준을 좌우한다."
+    },
+    {
+      "id": 80,
+      "keywords": ["ALD", "Precursor", "Purge", "Flow"],
+      "text": "Precursor와 Purge Flow 비율이 적절하지 않으면 표면 포화가 불완전해지고 성장률 변동이 커진다."
+    },
+    {
+      "id": 81,
+      "keywords": ["ALD", "Precursor", "Purge", "Pressure"],
+      "text": "Precursor 주입 후 Pressure 회복 속도는 Purge 효율과 밀접하며, ALD 반응의 self-limiting 성질 유지에 중요하다."
+    },
+    {
+      "id": 82,
+      "keywords": ["ALD", "Precursor", "Plasma", "MFC"],
+      "text": "Plasma ALD에서는 Precursor 공급 MFC가 불안정하면 라디칼 반응성이 일정하게 유지되지 않아 박막 균일도가 저하된다."
+    },
+    {
+      "id": 83,
+      "keywords": ["ALD", "Precursor", "Plasma", "Flow"],
+      "text": "Precursor Flow 변화는 Plasma 라디칼 농도 조절에 영향을 주며, 낮은 온도 조건에서도 성장률 확보에 중요한 요인이다."
+    },
+    {
+      "id": 84,
+      "keywords": ["ALD", "Precursor", "Plasma", "Pressure"],
+      "text": "Plasma 조건 Pressure가 불안정하면 Precursor 분해 경로가 변하면서 박막 조성 편차가 발생한다."
+    },
+    {
+      "id": 85,
+      "keywords": ["ALD", "Precursor", "MFC", "Flow"],
+      "text": "Precursor 공급 MFC의 Flow 선형성이 낮으면 응답 지연이 발생해 ALD 사이클 타이밍이 무너질 수 있다."
+    },
+    {
+      "id": 86,
+      "keywords": ["ALD", "Precursor", "MFC", "Pressure"],
+      "text": "MFC 유량 오차가 클 경우 Precursor 분압 변화가 발생하여 표면 포화 반응이 제대로 유지되지 않는다."
+    },
+    {
+      "id": 87,
+      "keywords": ["ALD", "Precursor", "Flow", "Pressure"],
+      "text": "Flow와 Pressure 조합은 Precursor 표면 흡착 속도를 결정하며 ALD 성장률 제어의 핵심 요소다."
+    },
+    {
+      "id": 88,
+      "keywords": ["ALD", "Purge", "Plasma", "MFC"],
+      "text": "Plasma ALD Purge 단계에서 MFC 흐름이 흔들리면 잔류 라디칼이 챔버 벽에 재흡착되는 문제가 발생한다."
+    },
+    {
+      "id": 89,
+      "keywords": ["ALD", "Purge", "Plasma", "Flow"],
+      "text": "Purge Flow가 충분하지 않다면 Plasma 라디칼 제거가 지연되어 다음 사이클 반응이 교란된다."
+    },
+    {
+      "id": 90,
+      "keywords": ["ALD", "Purge", "Plasma", "Pressure"],
+      "text": "Purge Pressure 안정화 시간은 Plasma 반응의 재현성과 직결되며 박막 균일도에 큰 영향을 준다."
+    },
+    {
+      "id": 91,
+      "keywords": ["ALD", "Purge", "MFC", "Flow"],
+      "text": "ALD Purge에서 MFC Flow 응답이 늦으면 잔류가스 제거 시간이 길어져 cycle time이 증가한다."
+    },
+    {
+      "id": 92,
+      "keywords": ["ALD", "Purge", "MFC", "Pressure"],
+      "text": "MFC의 배기 유량 변동은 Purge Pressure 회복 패턴에 영향을 주며, ALD 프로세스 안정성 평가에 중요한 지표다."
+    },
+    {
+      "id": 93,
+      "keywords": ["ALD", "Purge", "Flow", "Pressure"],
+      "text": "Purge 단계에서 Flow와 Pressure가 동시에 흔들리면 표면 잔류물이 과도하게 남아 반응 중첩 문제가 발생한다."
+    },
+    {
+      "id": 94,
+      "keywords": ["ALD", "Plasma", "MFC", "Flow"],
+      "text": "Plasma ALD에서는 MFC가 안정적인 Flow를 유지해야 이온 에너지 분포가 균일하게 유지된다."
+    },
+    {
+      "id": 95,
+      "keywords": ["ALD", "Plasma", "MFC", "Pressure"],
+      "text": "MFC 유량 오차는 Plasma Pressure를 변화시키며, 이는 라디칼 생성 효율 저하로 이어질 수 있다."
     }
   ]
 }

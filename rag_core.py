@@ -2,12 +2,12 @@
 
 import json
 from pathlib import Path
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Union, Optional
 
-import numpy as np
-import torch
-from sentence_transformers import SentenceTransformer
-from transformers import AutoTokenizer, AutoModelForCausalLM
+import numpy as np  # type: ignore
+import torch  # type: ignore
+from sentence_transformers import SentenceTransformer  # type: ignore
+from transformers import AutoTokenizer, AutoModelForCausalLM  # type: ignore
 
 # ==============================
 # 0) 경로 / 상수 설정
@@ -23,13 +23,12 @@ LLM_MODEL_NAME = "meta-llama/Meta-Llama-3-8B-Instruct"
 DOCS: List[str] = []
 DOC_KEYWORDS: List[str] = []
 DOC_ITEMS: List[Dict[str, Any]] = []
-DOC_EMBEDS: np.ndarray | None = None
+DOC_EMBEDS: Optional[np.ndarray] = None
 
-DEVICE: torch.device | None = None
-DTYPE: torch.dtype | None = None
-EMB_MODEL: SentenceTransformer | None = None
-TOKENIZER: AutoTokenizer | None = None
-LLM: AutoModelForCausalLM | None = None
+DEVICE: Optional[torch.device] = None
+SEMB_MODEL: Optional[SentenceTransformer] = None
+TOKENIZER: Optional[AutoTokenizer] = None
+LLM: Optional[AutoModelForCausalLM] = None
 
 MODEL_INFO: Dict[str, Any] = {}
 
@@ -45,29 +44,78 @@ def load_docs(path: Path = DOCS_PATH):
     with path.open("r", encoding="utf-8") as f:
         raw = json.load(f)
 
-    # JSON 형태: {"documents": [ {...}, ... ]}
-    if isinstance(raw, dict) and "documents" in raw:
-        items = raw["documents"]
-    else:
-        raise ValueError("docs_ald.json 형식 오류 — 반드시 { 'documents': [...] } 형태여야 함")
-
     docs, keywords, pairs = [], [], []
 
-    for i, item in enumerate(items):
-        if not isinstance(item, dict):
-            print(f"[!] 경고: 문서 #{i} 형식 오류. dict 아님 → 건너뜀")
-            continue
+    # 새 구조: {"documents": [{"id": 1, "keywords": ["ALD"], "text": "..."}, ...]}
+    if isinstance(raw, dict) and "documents" in raw:
+        documents = raw["documents"]
+        
+        if isinstance(documents, list):
+            # 새 구조: keywords가 배열인 형태
+            for i, item in enumerate(documents):
+                if not isinstance(item, dict):
+                    print(f"[!] 경고: 문서 #{i} 형식 오류. dict 아님 → 건너뜀")
+                    continue
 
-        text = str(item.get("text", "")).strip()
-        kw = str(item.get("keyword", "unknown")).strip()
-
-        if not text:
-            print(f"[!] 경고: 문서 #{i} text 비어있음 → 건너뜀")
-            continue
-
-        docs.append(text)
-        keywords.append(kw)
-        pairs.append({"text": text, "keyword": kw})
+                text = str(item.get("text", "")).strip()
+                item_keywords = item.get("keywords", [])
+                
+                # keywords가 배열인 경우
+                if isinstance(item_keywords, list):
+                    if not text or not item_keywords:
+                        continue
+                    
+                    # 각 키워드마다 별도의 항목으로 추가 (검색 호환성)
+                    for kw in item_keywords:
+                        kw = str(kw).strip()
+                        if not kw:
+                            continue
+                        docs.append(text)
+                        keywords.append(kw)
+                        pairs.append({"text": text, "keyword": kw, "id": item.get("id")})
+                
+                # 기존 구조 호환: keyword가 단일 문자열인 경우
+                elif isinstance(item_keywords, str):
+                    kw = item_keywords.strip()
+                    if not text or not kw:
+                        continue
+                    docs.append(text)
+                    keywords.append(kw)
+                    pairs.append({"text": text, "keyword": kw, "id": item.get("id")})
+                
+                # 기존 구조 호환: keyword 필드가 있는 경우
+                elif "keyword" in item:
+                    kw = str(item.get("keyword", "unknown")).strip()
+                    if not text or not kw:
+                        continue
+                    docs.append(text)
+                    keywords.append(kw)
+                    pairs.append({"text": text, "keyword": kw, "id": item.get("id")})
+        
+        # 기존 구조 호환: documents가 dict인 경우 (키워드별 그룹화)
+        elif isinstance(documents, dict):
+            for keyword, text_list in documents.items():
+                if not isinstance(text_list, list):
+                    continue
+                
+                for item in text_list:
+                    if isinstance(item, dict):
+                        text = str(item.get("text", "")).strip()
+                    elif isinstance(item, str):
+                        text = item.strip()
+                    else:
+                        continue
+                    
+                    if not text:
+                        continue
+                    
+                    docs.append(text)
+                    keywords.append(keyword)
+                    pairs.append({"text": text, "keyword": keyword})
+        else:
+            raise ValueError("docs_ald.json 형식 오류 — documents는 list 또는 dict여야 함")
+    else:
+        raise ValueError("docs_ald.json 형식 오류 — 반드시 { 'documents': [...] } 형태여야 함")
 
     print(f"[+] 문서 로딩 완료 — 총 {len(docs)}개")
     return docs, keywords, pairs
@@ -186,7 +234,7 @@ def get_keyword_stats() -> Dict[str, int]:
 def retrieve(
     query: str,
     top_k: int = 3,
-    filter_keyword: str | None = None,
+    filter_keyword: Optional[str] = None,
 ):
     _init_models_if_needed()
 
@@ -240,12 +288,19 @@ def generate_answer(
     query: str,
     top_k: int = 3,
     max_new_tokens: int = 256,
-    filter_keyword: str | None = None,
+    filter_keyword: Optional[str] = None,
     context_only: bool = False,
     debug: bool = False,
 ):
 
     _init_models_if_needed()
+    
+    # 모델이 아직 로딩 중인지 확인
+    if LLM is None or TOKENIZER is None:
+        return (
+            "모델이 아직 로딩 중입니다. 잠시 후 다시 시도해주세요.",
+            []
+        )
 
     # 검색 수행
     retrieved = retrieve(query, top_k=top_k, filter_keyword=filter_keyword)
@@ -280,7 +335,7 @@ def generate_answer(
     ctx = "\n".join([f"- ({kw}) {text}" for text, _, kw in retrieved])
 
     system_prompt = (
-        "너는 반도체 ALD, 플라즈마, 유량, 압력, 챔버 개념을 설명하는 조수야.\n"
+        "너는 반도체 ALD, 플라즈마, 유량, 압력, 챔버 등 ALD 개념을 설명하는 조수야.\n"
         "반드시 한국어로만 답해야 해.\n"
         "컨텍스트에 없는 내용을 추측하지 마.\n"
         "만약 정보가 없으면 '해당 노트에 없는 내용입니다.'라고만 말해."
@@ -306,7 +361,24 @@ def generate_answer(
         messages, add_generation_prompt=True, tokenize=False
     )
 
-    inputs = TOKENIZER(full_prompt, return_tensors="pt").to(DEVICE)
+    inputs = TOKENIZER(full_prompt, return_tensors="pt")
+    
+    # device_map="auto"를 사용하는 경우, 모델의 실제 디바이스를 확인하고
+    # inputs를 그 디바이스로 이동시켜야 합니다.
+    if hasattr(LLM, "device"):
+        # 모델이 단일 디바이스에 있는 경우
+        model_device = LLM.device
+    elif hasattr(LLM, "hf_device_map"):
+        # device_map="auto"로 여러 디바이스에 분산된 경우
+        # 첫 번째 레이어의 디바이스를 확인
+        first_param = next(LLM.parameters())
+        model_device = first_param.device
+    else:
+        # 기본값으로 DEVICE 사용
+        model_device = DEVICE if DEVICE is not None else torch.device("cpu")
+    
+    # inputs를 모델과 같은 디바이스로 이동
+    inputs = {k: v.to(model_device) for k, v in inputs.items()}
 
     with torch.no_grad():
         output_ids = LLM.generate(

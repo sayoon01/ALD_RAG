@@ -1,5 +1,5 @@
-from sentence_transformers import SentenceTransformer
-import numpy as np
+from sentence_transformers import SentenceTransformer  # type: ignore
+import numpy as np  # type: ignore
 
 # 1) 임베딩 모델 불러오기
 # 필요하면 여기만 "BAAI/bge-m3" 로 바꾸면 됨

@@ -162,28 +162,115 @@ body {
 }
 
 /* ============================================
+   탭 네비게이션
+   ============================================ */
+.tab-nav {
+  display: flex;
+  gap: 0;
+  margin-bottom: 20px;
+  background: var(--bg-panel);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  padding: 4px;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 10px 20px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-sub);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  text-align: center;
+}
+
+.tab-btn:hover {
+  background: var(--bg-panel-hover);
+  color: var(--text-main);
+}
+
+.tab-btn.active {
+  background: var(--accent);
+  color: white;
+  box-shadow: var(--shadow-sm);
+}
+
+.tab-content {
+  display: none;
+  width: 100%;
+  max-width: 100%;
+}
+
+.tab-content.active {
+  display: grid !important;
+  grid-template-columns: 220px 1fr !important;
+  gap: 16px;
+  width: 100%;
+  max-width: 100%;
+  align-items: start;
+}
+
+/* 문서 관리 탭은 전체 너비 사용 (사이드바 없음) */
+#tab-docs.active {
+  display: block !important;
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  margin: 0;
+}
+
+/* 채팅 탭의 레이아웃 강제 */
+#tab-chat.active {
+  display: grid !important;
+  grid-template-columns: 220px 1fr !important;
+  gap: 16px;
+  width: 100%;
+}
+
+#tab-chat.active .sidebar {
+  grid-column: 1 / 2;
+  width: 220px !important;
+  min-width: 220px !important;
+  max-width: 220px !important;
+}
+
+#tab-chat.active .content-area {
+  grid-column: 2 / 3;
+  display: flex !important;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+}
+
+/* ============================================
    메인 레이아웃
    ============================================ */
 .main-content {
-  display: grid;
-  grid-template-columns: 350px 1fr;
-  gap: 20px;
   margin-bottom: 20px;
+  width: 100%;
 }
 
 @media (max-width: 1200px) {
-  .main-content {
+  .tab-content.active {
     grid-template-columns: 1fr;
   }
 }
 
 /* 질문과 답변 나란히 배치 */
 .chat-layout {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-bottom: 20px;
-  align-items: start;
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 16px;
+  margin-bottom: 16px;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  min-height: 450px;
+  height: calc(100vh - 360px);
 }
 
 @media (max-width: 900px) {
@@ -197,30 +284,43 @@ body {
 .chat-layout .panel-answer {
   display: flex;
   flex-direction: column;
+  min-height: 450px;
   height: 100%;
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
 }
 
 .chat-layout .question-wrapper {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .chat-layout .question-input {
   flex: 1;
+  min-height: 300px;
+  max-height: 350px;
 }
 
 .chat-layout .answer-content {
   flex: 1;
+  min-height: 300px;
+  max-height: 350px;
 }
 
 /* ============================================
-   사이드바 (옵션 + 질문 입력)
+   사이드바 (옵션)
    ============================================ */
 .sidebar {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
 }
 
 /* ============================================
@@ -229,10 +329,11 @@ body {
 .panel {
   background: var(--bg-panel);
   border-radius: var(--radius-lg);
-  padding: 20px;
+  padding: 16px;
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-md);
   transition: var(--transition);
+  min-width: 0;
 }
 
 .panel:hover {
@@ -260,6 +361,37 @@ body {
   margin: 0;
 }
 
+.panel-header-collapsible {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.panel-header-collapsible h2 {
+  margin: 0;
+}
+
+.collapse-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-sub);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  transition: var(--transition);
+}
+
+.collapse-btn:hover {
+  background: var(--bg-panel-hover);
+  color: var(--text-main);
+}
+
+.collapse-btn.collapsed {
+  transform: rotate(-90deg);
+}
+
 /* ============================================
    옵션 그리드
    ============================================ */
@@ -267,6 +399,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+.options-grid.collapsed {
+  display: none;
 }
 
 .option-group {
@@ -392,21 +528,25 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  height: 100%;
+  overflow: hidden;
 }
 
 .question-input {
   width: 100%;
   min-height: 300px;
-  max-height: 500px;
-  padding: 12px;
+  max-height: 350px;
+  padding: 16px;
   background: var(--bg-input);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   color: var(--text-main);
-  font-size: 14px;
+  font-size: 15px;
   font-family: inherit;
   resize: vertical;
   transition: var(--transition);
+  flex: 1;
+  box-sizing: border-box;
 }
 
 .question-input:focus {
@@ -425,6 +565,9 @@ body {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+  flex-shrink: 0;
+  margin-top: auto;
+  padding-top: 8px;
 }
 
 .question-hints {
@@ -509,24 +652,34 @@ body {
    콘텐츠 영역 (답변 + 컨텍스트)
    ============================================ */
 .content-area {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 16px;
+  min-width: 0;
+  width: 100%;
+  visibility: visible !important;
+  opacity: 1 !important;
+  background: transparent;
+  height: 100%;
+  min-height: calc(100vh - 250px);
+  flex: 1;
 }
 
 /* 답변 영역 */
 .answer-content {
   min-height: 300px;
-  max-height: 500px;
+  max-height: 350px;
   padding: 20px;
   background: var(--bg-input);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   white-space: pre-wrap;
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.8;
   color: var(--text-main);
   overflow-y: auto;
+  flex: 1;
+  box-sizing: border-box;
 }
 
 /* 컨텍스트 영역 */
@@ -534,6 +687,14 @@ body {
   min-height: 250px;
   max-height: 400px;
   overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.context-content.collapsed {
+  display: none;
 }
 
 .context-cards {
@@ -767,8 +928,192 @@ body {
 }
 
 /* ============================================
+   문서 관리 탭
+   ============================================ */
+.docs-management {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto auto;
+  gap: 16px;
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+/* 문서 통계는 전체 너비 */
+.panel-docs-stats {
+  grid-column: 1 / -1;
+  background: var(--bg-panel);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: var(--shadow-md);
+  max-height: 200px;
+  overflow-y: auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.panel-docs-add,
+.panel-docs-extract,
+.panel-docs-generate {
+  background: var(--bg-panel);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* 키워드별 그룹 보기는 전체 너비 */
+.panel-docs-group {
+  grid-column: 1 / -1;
+  background: var(--bg-panel);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: var(--shadow-md);
+  max-height: 500px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.docs-stats-content {
+  margin-top: 12px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.docs-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.form-group label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-main);
+}
+
+.form-input,
+.form-textarea {
+  padding: 8px 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-main);
+  font-size: 13px;
+  font-family: inherit;
+  transition: var(--transition);
+}
+
+.form-input:focus,
+.form-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 60px;
+  max-height: 120px;
+}
+
+.docs-result {
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  max-height: 150px;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.docs-result.success {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--success);
+  border: 1px solid var(--success);
+}
+
+.docs-result.error {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
+
+.docs-group-content {
+  margin-top: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.keyword-group {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--bg-input);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.keyword-group h3 {
+  font-size: 16px;
+  margin-bottom: 8px;
+  color: var(--accent);
+}
+
+.doc-item {
+  padding: 12px;
+  margin-bottom: 8px;
+  background: var(--bg-panel);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--accent);
+}
+
+.doc-item-id {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.doc-item-text {
+  color: var(--text-main);
+  line-height: 1.5;
+}
+
+/* ============================================
    반응형 디자인
    ============================================ */
+@media (max-width: 1200px) {
+  .docs-management {
+    grid-template-columns: 1fr;
+  }
+  
+  .panel-docs-stats,
+  .panel-docs-group {
+    grid-column: 1;
+  }
+}
+
 @media (max-width: 768px) {
   body {
     padding: 12px;
@@ -796,5 +1141,14 @@ body {
   .btn-primary {
     width: 100%;
     justify-content: center;
+  }
+  
+  .docs-management {
+    grid-template-columns: 1fr;
+  }
+  
+  .panel-docs-stats,
+  .panel-docs-group {
+    grid-column: 1;
   }
 }
