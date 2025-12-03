@@ -19,7 +19,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List
 
-BASE_DIR = Path(__file__).resolve().parent.parent  # ~/ald-rag-lab
+BASE_DIR = Path(__file__).resolve().parent.parent.parent  # ~/ald-rag-lab
 DOCS_PATH = BASE_DIR / "docs" / "docs_ald.json"
 
 

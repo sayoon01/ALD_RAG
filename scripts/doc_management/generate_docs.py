@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 # rag_core 모듈 경로 추가
-BASE_DIR = Path(__file__).resolve().parent.parent  # ~/ald-rag-lab
+BASE_DIR = Path(__file__).resolve().parent.parent.parent  # ~/ald-rag-lab
 sys.path.insert(0, str(BASE_DIR))
 
 DOCS_PATH = BASE_DIR / "docs" / "docs_ald.json"
@@ -37,25 +37,26 @@ except ImportError:
 # 1) 문서 로딩/저장
 # ==============================
 
-def load_docs() -> List[Dict[str, Any]]:
+def load_docs() -> Dict[str, List[Dict[str, str]]]:
     """docs_ald.json 로드"""
     if not DOCS_PATH.exists():
-        return []
+        return {}
     
     with DOCS_PATH.open("r", encoding="utf-8") as f:
         data = json.load(f)
     
-    return data.get("documents", [])
+    return data.get("documents", {})
 
 
-def save_docs(docs: List[Dict[str, Any]]) -> None:
+def save_docs(docs: Dict[str, List[Dict[str, str]]]) -> None:
     """docs_ald.json 저장"""
     DOCS_PATH.parent.mkdir(exist_ok=True, parents=True)
     data = {"documents": docs}
     with DOCS_PATH.open("w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     
-    print(f"[+] 저장 완료: {len(docs)}개 문서")
+    total = sum(len(texts) for texts in docs.values())
+    print(f"[+] 저장 완료: {len(docs)}개 키워드, {total}개 문서")
 
 
 # ==============================
@@ -313,14 +314,7 @@ def run_llm_mode(keyword: str, count: int):
     print(f"    실제 매뉴얼이나 문서에서 추출하는 것을 권장합니다.\n")
     
     docs = load_docs()
-    # 키워드로 필터링하여 기존 텍스트 수집
-    existing_texts = []
-    for item in docs:
-        keywords = item.get("keywords", [])
-        if isinstance(keywords, list) and keyword in keywords:
-            existing_texts.append(item.get("text", ""))
-        elif isinstance(keywords, str) and keywords == keyword:
-            existing_texts.append(item.get("text", ""))
+    existing_texts = [item["text"] for item in docs.get(keyword, [])]
     
     if not existing_texts:
         print(f"[!] 경고: '{keyword}' 키워드에 기존 데이터가 없습니다.")
@@ -348,17 +342,10 @@ def run_llm_mode(keyword: str, count: int):
         # 추가 확인
         confirm = input(f"\n위 {len(new_texts)}개 문장을 검토 후 추가하시겠습니까? (y/n): ").strip().lower()
         if confirm == 'y':
-            # 다음 ID 계산
-            next_id = max([item.get("id", 0) for item in docs], default=0) + 1
-            
+            if keyword not in docs:
+                docs[keyword] = []
             for text in new_texts:
-                new_item = {
-                    "id": next_id,
-                    "keywords": [keyword],
-                    "text": text
-                }
-                docs.append(new_item)
-                next_id += 1
+                docs[keyword].append({"text": text})
             save_docs(docs)
             print(f"[✓] {len(new_texts)}개 문장이 추가되었습니다.")
         else:
@@ -387,16 +374,10 @@ def run_template_mode(keyword: str, count: int):
     confirm = input(f"\n위 {len(new_texts)}개 문장을 추가하시겠습니까? (y/n): ").strip().lower()
     if confirm == 'y':
         docs = load_docs()
-        next_id = max([item.get("id", 0) for item in docs], default=0) + 1
-        
+        if keyword not in docs:
+            docs[keyword] = []
         for text in new_texts:
-            new_item = {
-                "id": next_id,
-                "keywords": [keyword],
-                "text": text
-            }
-            docs.append(new_item)
-            next_id += 1
+            docs[keyword].append({"text": text})
         save_docs(docs)
         print(f"[✓] {len(new_texts)}개 문장이 추가되었습니다.")
 

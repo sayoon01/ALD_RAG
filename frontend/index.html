@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>반도체 ALD RAG 챗봇</title>
     <link rel="stylesheet" href="style.css" />
+    <script>
+      // localStorage 초기화 (API 연결 문제 해결)
+      // 페이지 로드 시 잘못된 API 주소를 자동으로 제거
+      (function() {
+        const saved = localStorage.getItem('api_base_url');
+        // 8080 포트(프론트엔드 포트)로 설정된 경우 제거
+        if (saved && saved.includes(':8080')) {
+          console.log('[초기화] 잘못된 API 주소 제거:', saved);
+          localStorage.removeItem('api_base_url');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div class="app-container">
@@ -124,13 +136,17 @@
                   <div class="checkbox-group">
                     <label class="checkbox-label">
                       <input type="checkbox" id="context-only" />
-                      <span>컨텍스트만 보기</span>
-                      <span class="checkbox-hint">답변 생성 없이 검색 결과만</span>
+                      <div class="checkbox-content">
+                        <span class="checkbox-text">컨텍스트만 보기</span>
+                        <span class="checkbox-hint">답변 생성 없이 검색 결과만</span>
+                      </div>
                     </label>
                     <label class="checkbox-label">
                       <input type="checkbox" id="debug-flag" />
-                      <span>디버그 모드</span>
-                      <span class="checkbox-hint">백엔드 콘솔에 상세 로그 출력</span>
+                      <div class="checkbox-content">
+                        <span class="checkbox-text">디버그 모드</span>
+                        <span class="checkbox-hint">백엔드 콘솔에 상세 로그 출력</span>
+                      </div>
                     </label>
                   </div>
                 </div>
@@ -178,34 +194,73 @@
                     <p>왼쪽에 질문을 입력하고 전송 버튼을 눌러주세요.</p>
                   </div>
                 </div>
+                <!-- 피드백 버튼 영역 -->
+                <div id="feedback-area" class="feedback-area" style="display: none;">
+                  <div class="feedback-label">이 답변이 도움이 되었나요?</div>
+                  <div class="feedback-buttons">
+                    <button id="feedback-like-btn" class="btn-feedback btn-like" title="좋아요">
+                      👍 좋아요
+                    </button>
+                    <button id="feedback-dislike-btn" class="btn-feedback btn-dislike" title="싫어요">
+                      👎 싫어요
+                    </button>
+                  </div>
+                  <div id="feedback-thanks" class="feedback-thanks" style="display: none;">
+                    감사합니다! 피드백이 저장되었습니다.
+                  </div>
+                </div>
               </section>
             </div>
 
-            <!-- 컨텍스트 영역 -->
-            <section class="panel panel-context">
-              <div class="panel-header-collapsible">
-                <div style="display: flex; align-items: center; gap: 12px;">
-                  <h2>📚 참고한 컨텍스트</h2>
-                  <span id="context-count" class="badge badge-info">0 개</span>
+            <!-- 최근 질문/답변 히스토리와 컨텍스트 나란히 배치 -->
+            <div class="history-context-layout">
+              <!-- 최근 질문/답변 히스토리 -->
+              <section class="panel panel-history">
+                <div class="panel-header">
+                  <h2>💬 최근 질문/답변</h2>
+                  <button id="clear-history-btn" class="btn-ghost-small" title="히스토리 지우기">
+                    🗑️
+                  </button>
                 </div>
-                <button class="collapse-btn" id="context-collapse-btn" title="컨텍스트 접기/펼치기">▼</button>
-              </div>
-              <div id="contexts" class="context-content">
-                <div class="empty-state">
-                  <div class="empty-icon">📄</div>
-                  <p>검색된 컨텍스트가 여기에 표시됩니다.</p>
+                <div id="question-history" class="history-content">
+                  <div class="empty-state">
+                    <div class="empty-icon">💭</div>
+                    <p>질문을 보내면 여기에 히스토리가 저장됩니다.</p>
+                  </div>
                 </div>
-              </div>
-            </section>
+              </section>
+
+              <!-- 컨텍스트 영역 -->
+              <section class="panel panel-context">
+                <div class="panel-header-collapsible">
+                  <div style="display: flex; align-items: center; gap: 12px;">
+                    <h2>📚 참고한 컨텍스트</h2>
+                    <span id="context-count" class="badge badge-info">0 개</span>
+                  </div>
+                  <button class="collapse-btn" id="context-collapse-btn" title="컨텍스트 접기/펼치기">▼</button>
+                </div>
+                <div id="contexts" class="context-content">
+                  <div class="empty-state">
+                    <div class="empty-icon">📄</div>
+                    <p>검색된 컨텍스트가 여기에 표시됩니다.</p>
+                  </div>
+                </div>
+              </section>
+            </div>
           </main>
         </div>
 
         <!-- 문서 관리 탭 -->
         <div class="tab-content" id="tab-docs" style="display: none; width: 100%;">
           <div class="docs-management">
-            <!-- 문서 통계 -->
+            <!-- 문서 통계 (키워드 통계 포함) -->
             <section class="panel panel-docs-stats">
-              <h2>📊 문서 통계</h2>
+              <div class="panel-header">
+                <h2>📊 문서 통계</h2>
+                <button id="refresh-docs-stats-btn" class="btn-ghost-small" title="통계 새로고침">
+                  🔄
+                </button>
+              </div>
               <div id="docs-stats-content" class="docs-stats-content">
                 <div class="loading-state">
                   <div class="spinner"></div>
@@ -289,21 +344,6 @@
         </div>
       </div>
 
-      <!-- 하단: 키워드 통계 -->
-      <section class="panel panel-stats">
-        <div class="stats-header">
-          <h2>📊 키워드 통계</h2>
-          <button id="refresh-stats-btn" class="btn-ghost-small" title="통계 새로고침">
-            🔄
-          </button>
-        </div>
-        <div id="keyword-stats" class="stats-content">
-          <div class="loading-state">
-            <div class="spinner"></div>
-            <p>키워드 통계를 불러오는 중...</p>
-          </div>
-        </div>
-      </section>
     </div>
 
     <script src="main.js"></script>

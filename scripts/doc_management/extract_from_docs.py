@@ -17,9 +17,9 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from typing import List, Dict, Set, Any
+from typing import List, Dict, Set
 
-BASE_DIR = Path(__file__).resolve().parent.parent  # ~/ald-rag-lab
+BASE_DIR = Path(__file__).resolve().parent.parent.parent  # ~/ald-rag-lab
 DOCS_PATH = BASE_DIR / "docs" / "docs_ald.json"
 
 # PDF 처리를 위한 선택적 import
@@ -30,19 +30,19 @@ except ImportError:
     PDF_AVAILABLE = False
 
 
-def load_docs() -> List[Dict[str, Any]]:
+def load_docs() -> Dict[str, List[Dict[str, str]]]:
     """docs_ald.json 로드"""
     if not DOCS_PATH.exists():
-        return []
+        return {}
     
     import json
     with DOCS_PATH.open("r", encoding="utf-8") as f:
         data = json.load(f)
     
-    return data.get("documents", [])
+    return data.get("documents", {})
 
 
-def save_docs(docs: List[Dict[str, Any]]) -> None:
+def save_docs(docs: Dict[str, List[Dict[str, str]]]) -> None:
     """docs_ald.json 저장"""
     import json
     DOCS_PATH.parent.mkdir(exist_ok=True, parents=True)
@@ -50,7 +50,8 @@ def save_docs(docs: List[Dict[str, Any]]) -> None:
     with DOCS_PATH.open("w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     
-    print(f"[+] 저장 완료: {len(docs)}개 문서")
+    total = sum(len(texts) for texts in docs.values())
+    print(f"[+] 저장 완료: {len(docs)}개 키워드, {total}개 문서")
 
 
 def extract_from_text(text: str, keywords: List[str]) -> Dict[str, List[str]]:
@@ -173,33 +174,23 @@ def run_text_mode(file_path: str, keywords: List[str], auto_add: bool = False):
             print(f"  ... 외 {len(sentences) - 10}개")
         
         # 자동 추가 또는 확인
-        next_id = max([item.get("id", 0) for item in docs], default=0) + 1
-        
         if auto_add:
+            if keyword not in docs:
+                docs[keyword] = []
+            
             for sentence in sentences:
-                # 중복 체크
-                if not any(item.get("text", "") == sentence for item in docs):
-                    new_item = {
-                        "id": next_id,
-                        "keywords": [keyword],
-                        "text": sentence
-                    }
-                    docs.append(new_item)
-                    next_id += 1
+                if {"text": sentence} not in docs[keyword]:
+                    docs[keyword].append({"text": sentence})
                     new_count += 1
         else:
             confirm = input(f"\n위 {len(sentences)}개 문장을 '{keyword}' 키워드에 추가하시겠습니까? (y/n): ").strip().lower()
             if confirm == 'y':
+                if keyword not in docs:
+                    docs[keyword] = []
+                
                 for sentence in sentences:
-                    # 중복 체크
-                    if not any(item.get("text", "") == sentence for item in docs):
-                        new_item = {
-                            "id": next_id,
-                            "keywords": [keyword],
-                            "text": sentence
-                        }
-                        docs.append(new_item)
-                        next_id += 1
+                    if {"text": sentence} not in docs[keyword]:
+                        docs[keyword].append({"text": sentence})
                         new_count += 1
     
     if new_count > 0:
@@ -251,33 +242,23 @@ def run_pdf_mode(file_path: str, keywords: List[str], auto_add: bool = False):
         if len(sentences) > 10:
             print(f"  ... 외 {len(sentences) - 10}개")
         
-        next_id = max([item.get("id", 0) for item in docs], default=0) + 1
-        
         if auto_add:
+            if keyword not in docs:
+                docs[keyword] = []
+            
             for sentence in sentences:
-                # 중복 체크
-                if not any(item.get("text", "") == sentence for item in docs):
-                    new_item = {
-                        "id": next_id,
-                        "keywords": [keyword],
-                        "text": sentence
-                    }
-                    docs.append(new_item)
-                    next_id += 1
+                if {"text": sentence} not in docs[keyword]:
+                    docs[keyword].append({"text": sentence})
                     new_count += 1
         else:
             confirm = input(f"\n위 {len(sentences)}개 문장을 '{keyword}' 키워드에 추가하시겠습니까? (y/n): ").strip().lower()
             if confirm == 'y':
+                if keyword not in docs:
+                    docs[keyword] = []
+                
                 for sentence in sentences:
-                    # 중복 체크
-                    if not any(item.get("text", "") == sentence for item in docs):
-                        new_item = {
-                            "id": next_id,
-                            "keywords": [keyword],
-                            "text": sentence
-                        }
-                        docs.append(new_item)
-                        next_id += 1
+                    if {"text": sentence} not in docs[keyword]:
+                        docs[keyword].append({"text": sentence})
                         new_count += 1
     
     if new_count > 0:

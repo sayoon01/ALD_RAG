@@ -1,6 +1,7 @@
 # rag_core.py
 
 import json
+import os
 from pathlib import Path
 from typing import List, Tuple, Dict, Any, Union, Optional
 
@@ -15,9 +16,13 @@ from transformers import AutoTokenizer, AutoModelForCausalLM  # type: ignore
 
 BASE_DIR = Path(__file__).resolve().parent           # ~/ald-rag-lab
 DOCS_PATH = BASE_DIR / "docs" / "docs_ald.json"
+SYNONYMS_PATH = BASE_DIR / "synonyms.json"
+FEEDBACK_PATH = BASE_DIR / "feedback" / "feedback_data.json"
 
 EMBED_MODEL_NAME = "thenlper/gte-small"
 LLM_MODEL_NAME = "meta-llama/Meta-Llama-3-8B-Instruct"
+# Fine-tuned 모델 경로 (None이면 기본 모델 사용)
+FINETUNED_MODEL_PATH = None  # 예: BASE_DIR / "finetuning" / "models" / "ald-llama-lora"
 
 # 전역 상태
 DOCS: List[str] = []
@@ -31,6 +36,16 @@ TOKENIZER: Optional[AutoTokenizer] = None
 LLM: Optional[AutoModelForCausalLM] = None
 
 MODEL_INFO: Dict[str, Any] = {}
+
+# 동의어 매핑
+SYNONYM_GROUPS: List[List[str]] = []
+SYNONYM_MAP: Dict[str, str] = {}  # keyword -> normalized keyword
+
+# 피드백 기반 점수 조정 (문서 인덱스 -> 점수 보정값)
+FEEDBACK_SCORES: Dict[int, float] = {}  # 문서 인덱스 -> 점수 보정값 (양수: 보너스, 음수: 페널티)
+FEEDBACK_LAST_MODIFIED: float = 0.0  # 피드백 파일 마지막 수정 시간 (캐싱용)
+import os
+FEEDBACK_LAST_MODIFIED: float = 0.0  # 피드백 파일 마지막 수정 시간 (캐싱용)
 
 
 # ==============================
@@ -127,23 +142,28 @@ def load_docs(path: Path = DOCS_PATH):
 
 def _init_models_if_needed():
     global DOCS, DOC_KEYWORDS, DOC_ITEMS, DOC_EMBEDS
-    global EMB_MODEL, TOKENIZER, LLM, DEVICE, DTYPE, MODEL_INFO
+    global SEMB_MODEL, TOKENIZER, LLM, DEVICE, DTYPE, MODEL_INFO
 
     if DOC_EMBEDS is not None:
+        # 문서는 이미 로드되었지만 피드백 점수는 다시 로드 (최신 상태 유지)
+        load_feedback_scores()
         return  # 이미 초기화되었음
 
+    # 동의어 로딩
+    load_synonyms()
+    
     # 문서 로딩
     DOCS, DOC_KEYWORDS, DOC_ITEMS = load_docs()
 
     # 임베딩 모델
     print(f"[+] Embedding model 로딩 중: {EMBED_MODEL_NAME}")
-    EMB_MODEL = SentenceTransformer(EMBED_MODEL_NAME)
+    SEMB_MODEL = SentenceTransformer(EMBED_MODEL_NAME)
 
-    DOC_EMBEDS = EMB_MODEL.encode(
+    DOC_EMBEDS = SEMB_MODEL.encode(
         DOCS,
-        normalize_embeddings=True,
-        convert_to_numpy=True
-    ).astype("float32")
+    normalize_embeddings=True,
+    convert_to_numpy=True
+).astype("float32")
 
     print("[+] 문서 임베딩 shape:", DOC_EMBEDS.shape)
 
@@ -168,6 +188,22 @@ def _init_models_if_needed():
         device_map="auto" if DEVICE.type != "cpu" else None
     )
 
+    # Fine-tuned 모델 로드 (LoRA adapter)
+    if FINETUNED_MODEL_PATH is not None and Path(FINETUNED_MODEL_PATH).exists():
+        try:
+            try:
+                from peft import PeftModel  # type: ignore
+            except ImportError:
+                print(f"[!] peft 라이브러리가 없어 Fine-tuned 모델을 로드할 수 없습니다.")
+                print(f"[!] pip install peft 로 설치하세요.")
+            else:
+                print(f"[+] Fine-tuned adapter 로딩 중: {FINETUNED_MODEL_PATH}")
+                LLM = PeftModel.from_pretrained(LLM, FINETUNED_MODEL_PATH)
+                print(f"[+] Fine-tuned adapter 로딩 완료")
+        except Exception as e:
+            print(f"[!] Fine-tuned 모델 로드 실패: {e}")
+            print(f"[!] 기본 모델을 사용합니다.")
+
     print(f"[+] LLaMA 로딩 완료 (device={DEVICE})")
 
     MODEL_INFO.update({
@@ -184,9 +220,9 @@ def reload_documents():
     docs_ald.json 파일을 다시 로드하고 임베딩을 재생성합니다.
     모델은 이미 로드되어 있어야 합니다 (EMB_MODEL이 있어야 함).
     """
-    global DOCS, DOC_KEYWORDS, DOC_ITEMS, DOC_EMBEDS, MODEL_INFO
+    global DOCS, DOC_KEYWORDS, DOC_ITEMS, DOC_EMBEDS, MODEL_INFO, SEMB_MODEL
     
-    if EMB_MODEL is None:
+    if SEMB_MODEL is None:
         # 모델이 아직 초기화되지 않았으면 전체 초기화
         _init_models_if_needed()
         return
@@ -197,7 +233,7 @@ def reload_documents():
     DOCS, DOC_KEYWORDS, DOC_ITEMS = load_docs()
     
     # 임베딩 재생성
-    DOC_EMBEDS = EMB_MODEL.encode(
+    DOC_EMBEDS = SEMB_MODEL.encode(
         DOCS,
         normalize_embeddings=True,
         convert_to_numpy=True
@@ -210,13 +246,170 @@ def reload_documents():
     MODEL_INFO.update({
         "num_docs": len(DOCS),
         "keywords": sorted(list(set(DOC_KEYWORDS))),
-    })
+        })
     
     return len(DOCS)
 
 
 # ==============================
-# 3) 키워드 통계
+# 3) 동의어 매핑 로딩
+# ==============================
+
+def load_synonyms(path: Path = SYNONYMS_PATH):
+    """동의어 그룹을 로드하고 매핑을 생성합니다."""
+    global SYNONYM_GROUPS, SYNONYM_MAP
+    
+    if not path.exists():
+        print(f"[!] 동의어 파일이 없습니다: {path}. 기본 동의어만 사용합니다.")
+        SYNONYM_GROUPS = []
+        SYNONYM_MAP = {}
+        return
+    
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        
+        SYNONYM_GROUPS = data.get("synonym_groups", [])
+        
+        # 각 그룹의 첫 번째 키워드를 정규화 키워드로 사용
+        SYNONYM_MAP = {}
+        for group in SYNONYM_GROUPS:
+            if not group:
+                continue
+            normalized = group[0].lower()
+            for keyword in group:
+                SYNONYM_MAP[keyword.lower()] = normalized
+        
+        print(f"[+] 동의어 매핑 로드 완료: {len(SYNONYM_GROUPS)}개 그룹")
+    except Exception as e:
+        print(f"[!] 동의어 로드 실패: {e}")
+        SYNONYM_GROUPS = []
+        SYNONYM_MAP = {}
+
+
+def normalize_keyword(keyword: str) -> str:
+    """키워드를 정규화된 형태로 변환합니다."""
+    if not keyword:
+        return ""
+    normalized = keyword.lower().strip()
+    return SYNONYM_MAP.get(normalized, normalized)
+
+
+def are_synonyms(keyword1: str, keyword2: str) -> bool:
+    """두 키워드가 동의어인지 확인합니다."""
+    return normalize_keyword(keyword1) == normalize_keyword(keyword2)
+
+
+# ==============================
+# 3-2) 피드백 기반 점수 조정 로딩
+# ==============================
+
+def load_feedback_scores(path: Path = FEEDBACK_PATH, force_reload: bool = False):
+    """
+    피드백 데이터를 로드하여 문서별 점수 조정 가중치를 계산합니다.
+    좋은 피드백을 받은 문서는 점수 증가, 나쁜 피드백은 감소.
+    
+    Args:
+        path: 피드백 파일 경로
+        force_reload: True이면 캐시를 무시하고 강제로 다시 로드
+    """
+    global FEEDBACK_SCORES, FEEDBACK_LAST_MODIFIED
+    
+    # DOCS가 아직 로드되지 않았으면 스킵
+    if not DOCS:
+        FEEDBACK_SCORES = {}
+        return
+    
+    if not path.exists():
+        FEEDBACK_SCORES = {}
+        FEEDBACK_LAST_MODIFIED = 0.0
+        return
+    
+    # 캐싱: 파일이 변경되지 않았고 강제 리로드가 아니면 스킵
+    try:
+        current_mtime = os.path.getmtime(path)
+        if not force_reload and FEEDBACK_SCORES and current_mtime == FEEDBACK_LAST_MODIFIED:
+            return  # 캐시된 값 사용
+        FEEDBACK_LAST_MODIFIED = current_mtime
+    except OSError:
+        FEEDBACK_SCORES = {}
+        return
+    
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            feedback_data = json.load(f)
+        
+        feedbacks = feedback_data.get("feedbacks", [])
+        if not feedbacks:
+            FEEDBACK_SCORES = {}
+            return
+        
+        # 문서 텍스트 -> 인덱스 매핑 (효율적인 조회를 위해)
+        doc_text_to_idx = {}
+        for idx, doc_text in enumerate(DOCS):
+            normalized_text = doc_text.strip()
+            # 정규화된 텍스트로 매핑 (중복 방지)
+            if normalized_text not in doc_text_to_idx:
+                doc_text_to_idx[normalized_text] = []
+            doc_text_to_idx[normalized_text].append(idx)
+        
+        # 각 문서에 대한 피드백 점수 누적
+        doc_feedback_scores = {}  # 인덱스 -> 누적 점수
+        
+        for feedback in feedbacks:
+            if feedback.get("feedback") not in ["like", "dislike"]:
+                continue
+            
+            contexts = feedback.get("contexts", [])
+            feedback_type = feedback.get("feedback")
+            
+            # 좋은 피드백: +1, 나쁜 피드백: -1
+            score_adjustment = 1.0 if feedback_type == "like" else -1.0
+            
+            # 각 컨텍스트에 대해 해당하는 문서 인덱스 찾기
+            for ctx in contexts:
+                ctx_text = str(ctx.get("text", "")).strip()
+                if not ctx_text:
+                    continue
+                
+                # 효율적인 매칭: 정규화된 텍스트로 직접 조회
+                ctx_normalized = ctx_text
+                
+                # 정확한 매칭 우선
+                if ctx_normalized in doc_text_to_idx:
+                    for idx in doc_text_to_idx[ctx_normalized]:
+                        if idx not in doc_feedback_scores:
+                            doc_feedback_scores[idx] = 0.0
+                        doc_feedback_scores[idx] += score_adjustment
+                else:
+                    # 부분 매칭 (정확한 매칭이 없는 경우만)
+                    for doc_text, idx_list in doc_text_to_idx.items():
+                        if ctx_normalized in doc_text or doc_text in ctx_normalized:
+                            for idx in idx_list:
+                                if idx not in doc_feedback_scores:
+                                    doc_feedback_scores[idx] = 0.0
+                                doc_feedback_scores[idx] += score_adjustment * 0.5  # 부분 매칭은 가중치 0.5
+        
+        # 점수를 정규화 (최대 ±0.2 범위로 제한)
+        if doc_feedback_scores:
+            max_abs_score = max(abs(s) for s in doc_feedback_scores.values())
+            if max_abs_score > 0:
+                FEEDBACK_SCORES = {
+                    idx: (score / max_abs_score) * 0.2  # 최대 ±0.2 보정
+                    for idx, score in doc_feedback_scores.items()
+                }
+            else:
+                FEEDBACK_SCORES = {}
+        else:
+            FEEDBACK_SCORES = {}
+        
+    except Exception as e:
+        print(f"[!] 피드백 점수 로드 실패: {e}")
+        FEEDBACK_SCORES = {}
+
+
+# ==============================
+# 4) 키워드 통계
 # ==============================
 
 def get_keyword_stats() -> Dict[str, int]:
@@ -228,39 +421,125 @@ def get_keyword_stats() -> Dict[str, int]:
 
 
 # ==============================
-# 4) 검색 (Retrieval)
+# 5) 검색 (Retrieval) - 하이브리드 검색
 # ==============================
+
+def extract_keywords_from_query(query: str) -> List[str]:
+    """쿼리에서 키워드를 추출합니다."""
+    query_lower = query.lower()
+    found_keywords = []
+    
+    # 모든 키워드 확인
+    for keyword in set(DOC_KEYWORDS):
+        if keyword.lower() in query_lower:
+            found_keywords.append(keyword)
+    
+    # 동의어도 확인
+    for keyword in set(DOC_KEYWORDS):
+        normalized_kw = normalize_keyword(keyword)
+        # 쿼리의 단어들을 확인
+        query_words = query_lower.split()
+        for word in query_words:
+            if normalize_keyword(word) == normalized_kw:
+                if keyword not in found_keywords:
+                    found_keywords.append(keyword)
+    
+    return found_keywords
+
+
+def compute_keyword_score(doc_keyword: str, query: str) -> float:
+    """문서 키워드와 쿼리 간의 키워드 매칭 점수를 계산합니다."""
+    doc_keyword_lower = doc_keyword.lower()
+    query_lower = query.lower()
+    
+    # 1. 정확한 키워드 매칭
+    if doc_keyword_lower in query_lower:
+        return 1.0
+    
+    # 2. 동의어 매칭
+    query_words = query_lower.split()
+    for word in query_words:
+        if are_synonyms(word, doc_keyword):
+            return 0.8
+    
+    # 3. 부분 매칭 (키워드가 쿼리에 포함)
+    if doc_keyword_lower in query_lower or query_lower in doc_keyword_lower:
+        return 0.5
+    
+    return 0.0
+
 
 def retrieve(
     query: str,
     top_k: int = 3,
     filter_keyword: Optional[str] = None,
+    hybrid_weight: float = 0.3,  # 키워드 점수 가중치 (0.0 = 의미 검색만, 1.0 = 키워드 검색만)
 ):
+    """
+    하이브리드 검색: 키워드 매칭 + 의미 기반 검색
+    
+    Args:
+        query: 검색 쿼리
+        top_k: 상위 K개 결과 반환
+        filter_keyword: 키워드 필터 (선택)
+        hybrid_weight: 키워드 점수 가중치 (0.0-1.0)
+    """
     _init_models_if_needed()
 
-    q_emb = EMB_MODEL.encode(
+    # 1. 의미 기반 검색 (기존 방식)
+    q_emb = SEMB_MODEL.encode(
         [query],
         normalize_embeddings=True,
         convert_to_numpy=True
     )[0].astype("float32")
 
-    scores = np.dot(DOC_EMBEDS, q_emb)
+    semantic_scores = np.dot(DOC_EMBEDS, q_emb)
+    
+    # 정규화: 0-1 범위로 변환
+    semantic_min, semantic_max = semantic_scores.min(), semantic_scores.max()
+    if semantic_max > semantic_min:
+        semantic_scores_normalized = (semantic_scores - semantic_min) / (semantic_max - semantic_min)
+    else:
+        semantic_scores_normalized = semantic_scores * 0 + 0.5
 
-    # 키워드 필터 적용
+    # 2. 키워드 매칭 점수 계산
+    keyword_scores = np.array([
+        compute_keyword_score(DOC_KEYWORDS[i], query)
+        for i in range(len(DOCS))
+    ])
+
+    # 3. 하이브리드 점수 결합
+    hybrid_scores = (1 - hybrid_weight) * semantic_scores_normalized + hybrid_weight * keyword_scores
+    
+    # 4. 피드백 기반 점수 조정 적용
+    load_feedback_scores()  # 최신 피드백 반영
+    for idx in range(len(DOCS)):
+        if idx in FEEDBACK_SCORES:
+            hybrid_scores[idx] += FEEDBACK_SCORES[idx]
+            # 점수를 0-1 범위로 클리핑
+            hybrid_scores[idx] = max(0.0, min(1.0, hybrid_scores[idx]))
+
+    # 키워드 필터 적용 (동의어 인식)
     idxs = range(len(DOCS))
 
     if filter_keyword:
-        idxs = [i for i in idxs if DOC_KEYWORDS[i].lower() == filter_keyword.lower()]
+        filtered_idxs = []
+        filter_normalized = normalize_keyword(filter_keyword)
+        for i in idxs:
+            doc_kw_normalized = normalize_keyword(DOC_KEYWORDS[i])
+            if doc_kw_normalized == filter_normalized or are_synonyms(DOC_KEYWORDS[i], filter_keyword):
+                filtered_idxs.append(i)
+        idxs = filtered_idxs
 
     # 해당 keyword 문서가 없는 경우
     if filter_keyword and not idxs:
         return []
 
     # 상위 K 선택
-    sorted_idx = sorted(idxs, key=lambda i: -scores[i])[:top_k]
+    sorted_idx = sorted(idxs, key=lambda i: -hybrid_scores[i])[:top_k]
 
     return [
-        (DOCS[i], float(scores[i]), DOC_KEYWORDS[i])
+        (DOCS[i], float(hybrid_scores[i]), DOC_KEYWORDS[i])
         for i in sorted_idx
     ]
 

@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 from typing import Dict, List, Any
 
-BASE_DIR = Path(__file__).resolve().parent.parent  # ~/ald-rag-lab
+BASE_DIR = Path(__file__).resolve().parent.parent.parent  # ~/ald-rag-lab
 DOCS_PATH = BASE_DIR / "docs" / "docs_ald.json"
 BACKUP_PATH = BASE_DIR / "docs" / "docs_ald.json.backup"
 

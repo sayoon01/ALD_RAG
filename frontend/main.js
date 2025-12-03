@@ -1,44 +1,32 @@
 // ============================================
 // 설정
 // ============================================
-// API 주소 자동 감지: 현재 접속한 호스트의 IP 사용
-// - 브라우저에서 열면: 현재 호스트 IP 자동 사용 (예: http://192.168.0.22:8000)
-// - file://로 열면: localStorage에 저장된 값 또는 기본값 127.0.0.1 사용
+// API 주소: 백엔드는 항상 localhost:8000에서 실행
+// 프론트엔드는 localhost:8080에서 실행
+const DEFAULT_API_BASE = "http://localhost:8000";
+
 function getApiBase() {
   // localStorage에서 저장된 값 확인
   const saved = localStorage.getItem("api_base_url");
-  if (saved && saved.trim()) {
+  if (saved && saved.trim() && saved.startsWith("http")) {
     console.log(`[API] localStorage에서 주소 사용: ${saved}`);
     return saved.trim();
   }
   
-  // 현재 페이지의 호스트 정보 확인
-  if (window.location.protocol === "file:") {
-    // file:// 프로토콜이면 기본값 사용
-    console.log(`[API] file:// 프로토콜 감지, 기본값 사용: http://127.0.0.1:8000`);
-    return "http://127.0.0.1:8000";
-  }
-  
-  // HTTP/HTTPS로 접속한 경우
-  // 만약 프론트엔드가 다른 포트에서 서빙되고 있다면 (예: 3000, 8080 등)
-  // API는 항상 8000 포트를 사용해야 함
-  const hostname = window.location.hostname;
-  const apiPort = "8000"; // API는 항상 8000 포트
-  
-  // localhost나 127.0.0.1이면 그대로 사용
-  if (hostname === "localhost" || hostname === "127.0.0.1") {
-    const apiBase = `http://127.0.0.1:${apiPort}`;
-    console.log(`[API] localhost 감지, API 주소: ${apiBase}`);
-    return apiBase;
-  }
-  
-  // 네트워크 IP인 경우
-  const apiBase = `http://${hostname}:${apiPort}`;
-  console.log(`[API] 네트워크 IP 감지 (${hostname}), API 주소: ${apiBase}`);
-  return apiBase;
+  // localStorage 값이 없거나 잘못되었으면 기본값 사용
+  console.log(`[API] 기본 API 주소 사용: ${DEFAULT_API_BASE}`);
+  return DEFAULT_API_BASE;
 }
 
 let API_BASE = getApiBase();
+
+// 현재 세션 정보 저장 (피드백 추적용)
+let currentSession = {
+  sessionId: null,
+  question: null,
+  answer: null,
+  contexts: []
+};
 
 // API 주소 변경 함수
 function setApiBase(newUrl) {
@@ -57,7 +45,7 @@ let els = {};
 function initElements() {
   els = {
     // 상태
-    status: document.getElementById("api-status"),
+  status: document.getElementById("api-status"),
     statusText: document.querySelector("#api-status .status-text"),
     statusDot: document.querySelector("#api-status .status-dot"),
     
@@ -69,27 +57,34 @@ function initElements() {
     infoKeywords: document.getElementById("info-keywords"),
     
     // 질문 입력
-    question: document.getElementById("question"),
-    sendBtn: document.getElementById("send-btn"),
-    clearBtn: document.getElementById("clear-answer-btn"),
-    infoLine: document.getElementById("info-line"),
-    
+  question: document.getElementById("question"),
+  sendBtn: document.getElementById("send-btn"),
+  clearBtn: document.getElementById("clear-answer-btn"),
+  infoLine: document.getElementById("info-line"),
+
     // 옵션
-    topkInput: document.getElementById("topk-input"),
-    topkLabel: document.getElementById("topk-label"),
-    maxTokensInput: document.getElementById("max-tokens-input"),
-    maxTokensLabel: document.getElementById("max-tokens-label"),
-    keywordSelect: document.getElementById("keyword-select"),
-    contextOnly: document.getElementById("context-only"),
-    debugFlag: document.getElementById("debug-flag"),
-    
+  topkInput: document.getElementById("topk-input"),
+  topkLabel: document.getElementById("topk-label"),
+  maxTokensInput: document.getElementById("max-tokens-input"),
+  maxTokensLabel: document.getElementById("max-tokens-label"),
+  keywordSelect: document.getElementById("keyword-select"),
+  contextOnly: document.getElementById("context-only"),
+  debugFlag: document.getElementById("debug-flag"),
+
     // 결과
-    answer: document.getElementById("answer"),
-    contexts: document.getElementById("contexts"),
-    contextCount: document.getElementById("context-count"),
-    keywordStats: document.getElementById("keyword-stats"),
-    refreshStatsBtn: document.getElementById("refresh-stats-btn"),
-  };
+  answer: document.getElementById("answer"),
+  contexts: document.getElementById("contexts"),
+  contextCount: document.getElementById("context-count"),
+  
+    // 피드백
+  feedbackArea: document.getElementById("feedback-area"),
+  feedbackLikeBtn: document.getElementById("feedback-like-btn"),
+  feedbackDislikeBtn: document.getElementById("feedback-dislike-btn"),
+  feedbackThanks: document.getElementById("feedback-thanks"),
+    questionHistory: document.getElementById("question-history"),
+    clearHistoryBtn: document.getElementById("clear-history-btn"),
+    refreshDocsStatsBtn: document.getElementById("refresh-docs-stats-btn"),
+};
 }
 
 // ============================================
@@ -169,7 +164,7 @@ async function loadApiStatusAndKeywords() {
   // API_BASE가 제대로 설정되었는지 확인
   if (!API_BASE || !API_BASE.startsWith('http')) {
     console.error(`[API] 잘못된 API 주소: ${API_BASE}`);
-    API_BASE = "http://127.0.0.1:8000";
+    API_BASE = DEFAULT_API_BASE;
     console.log(`[API] 기본값으로 재설정: ${API_BASE}`);
   }
   
@@ -202,10 +197,10 @@ async function loadApiStatusAndKeywords() {
     
     // 시스템 정보 표시
     renderSystemInfo(data);
-    
+
     // 키워드 정보 처리
     if (data.keywords && Object.keys(data.keywords).length > 0) {
-      renderKeywordStats(data.keywords);
+      // 키워드 통계는 문서 통계에 통합됨
       fillKeywordSelect(Object.keys(data.keywords));
     } else {
       // /keywords 엔드포인트로 재시도
@@ -227,15 +222,6 @@ async function loadApiStatusAndKeywords() {
     setStatusError("API 연결 실패");
     setInfo(`연결 오류: ${errorMsg}`, "error");
     
-    // 키워드 통계 영역에 오류 표시
-    if (els.keywordStats) {
-      els.keywordStats.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-icon">⚠️</div>
-          <p>API 연결 실패<br/>서버가 실행 중인지 확인하세요<br/><small>${API_BASE}</small></p>
-        </div>
-      `;
-    }
   }
 }
 
@@ -249,8 +235,8 @@ async function loadKeywordsFallback() {
     
     const stats = await res.json();
     if (stats && !stats.error) {
-      renderKeywordStats(stats);
-      fillKeywordSelect(Object.keys(stats));
+    // 키워드 통계는 문서 통계에 통합됨
+    fillKeywordSelect(Object.keys(stats));
     } else if (stats.error) {
       console.error("[keywords] 오류:", stats.error);
     }
@@ -263,7 +249,7 @@ function fillKeywordSelect(keywordList) {
   if (!els.keywordSelect) return;
   
   els.keywordSelect.innerHTML = '<option value="">(전체 키워드)</option>';
-  
+
   keywordList
     .filter((kw) => kw && kw !== "unknown")
     .sort()
@@ -275,54 +261,6 @@ function fillKeywordSelect(keywordList) {
     });
 }
 
-function renderKeywordStats(statsObj) {
-  if (!els.keywordStats) return;
-  
-  els.keywordStats.innerHTML = "";
-  
-  const entries = Object.entries(statsObj || {});
-  if (!entries.length) {
-    els.keywordStats.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon">📊</div>
-        <p>키워드 통계가 없습니다.</p>
-      </div>
-    `;
-    return;
-  }
-  
-  const total = entries.reduce((sum, [, v]) => sum + v, 0);
-  
-  const table = document.createElement("table");
-  table.className = "keyword-table";
-  
-  const thead = document.createElement("thead");
-  thead.innerHTML = `
-    <tr>
-      <th>키워드</th>
-      <th>문장 수</th>
-      <th>비율(%)</th>
-    </tr>
-  `;
-  table.appendChild(thead);
-  
-  const tbody = document.createElement("tbody");
-  entries
-    .sort((a, b) => b[1] - a[1])
-    .forEach(([kw, count]) => {
-      const tr = document.createElement("tr");
-      const ratio = total > 0 ? ((count / total) * 100).toFixed(1) : "0.0";
-      tr.innerHTML = `
-        <td>${kw}</td>
-        <td>${count}</td>
-        <td>${ratio}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-  table.appendChild(tbody);
-  
-  els.keywordStats.appendChild(table);
-}
 
 // ============================================
 // 슬라이더 라벨 동기화 (init 함수로 이동됨)
@@ -338,13 +276,13 @@ async function sendQuestion() {
   const filter_keyword = els.keywordSelect?.value || null;
   const context_only = els.contextOnly?.checked || false;
   const debug = els.debugFlag?.checked || false;
-  
+
   if (!question) {
     setInfo("질문을 입력해주세요!", "error");
     els.question?.focus();
     return;
   }
-  
+
   // UI 상태 변경
   setInfo("🤔 모델이 생각 중입니다... (GPU: 빠름, CPU: 1-2분 소요)", "info");
   
@@ -371,7 +309,7 @@ async function sendQuestion() {
   }
   
   if (els.sendBtn) {
-    els.sendBtn.disabled = true;
+  els.sendBtn.disabled = true;
     const btnText = els.sendBtn.querySelector(".btn-text");
     if (btnText) {
       btnText.textContent = "생성 중...";
@@ -381,7 +319,7 @@ async function sendQuestion() {
   // API_BASE가 제대로 설정되었는지 확인
   if (!API_BASE || !API_BASE.startsWith('http')) {
     console.error(`[API] 잘못된 API 주소: ${API_BASE}`);
-    API_BASE = "http://127.0.0.1:8000";
+    API_BASE = DEFAULT_API_BASE;
     console.log(`[API] 기본값으로 재설정: ${API_BASE}`);
   }
   
@@ -408,7 +346,7 @@ async function sendQuestion() {
     
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`[API] 응답 상태: ${res.status} ${res.statusText} (${elapsed}s)`);
-    
+
     if (!res.ok) {
       const errorText = await res.text();
       console.error(`[API] 응답 실패: ${res.status}`, errorText.substring(0, 200));
@@ -427,15 +365,14 @@ async function sendQuestion() {
                 현재 API 주소: <code style="background: var(--bg-secondary); padding: 2px 6px; border-radius: 3px;">${API_BASE}</code><br/><br/>
                 <strong>해결 방법:</strong><br/>
                 1. 시스템 정보의 "API 주소"를 클릭하여 변경<br/>
-                2. 올바른 주소: <code style="background: var(--bg-secondary); padding: 2px 6px; border-radius: 3px;">http://127.0.0.1:8000</code><br/>
-                또는 <code style="background: var(--bg-secondary); padding: 2px 6px; border-radius: 3px;">http://192.168.0.22:8000</code>
+                2. 올바른 주소: <code style="background: var(--bg-secondary); padding: 2px 6px; border-radius: 3px;">http://localhost:8000</code>
               </p>
             </div>
           `;
         }
       } else {
         setInfo(`API 요청 실패 (${res.status}): ${errorText.substring(0, 100)}`, "error");
-        setStatusError("요청 실패");
+      setStatusError("요청 실패");
         
         if (els.answer) {
           els.answer.innerHTML = `
@@ -457,13 +394,13 @@ async function sendQuestion() {
       }
       return;
     }
-    
+
     const data = await res.json();
     setInfo(`✅ 응답 완료 (${elapsed}초)`, "success");
-    
+
     // 답변 표시
     if (els.answer) {
-      if (data.answer) {
+    if (data.answer) {
         if (context_only && data.answer.includes("컨텍스트만")) {
           els.answer.innerHTML = `
             <div style="padding: 12px; background: var(--accent-soft); border-radius: var(--radius-md); margin-bottom: 12px;">
@@ -473,9 +410,9 @@ async function sendQuestion() {
             <div style="white-space: pre-wrap;">${data.answer}</div>
           `;
         } else {
-          els.answer.textContent = data.answer;
+      els.answer.textContent = data.answer;
         }
-      } else {
+    } else {
         els.answer.innerHTML = `
           <div class="empty-state">
             <div class="empty-icon">⚠️</div>
@@ -484,9 +421,31 @@ async function sendQuestion() {
         `;
       }
     }
-    
+
     // 컨텍스트 표시
     renderContexts(data.contexts || [], data.used_keyword || null);
+    
+    // 질문 히스토리에 추가
+    addToHistory(question, data.answer || "", data.contexts || []);
+    
+    // 세션 정보 저장 및 피드백 영역 표시
+    currentSession = {
+      sessionId: data.session_id || null,
+      question: question,
+      answer: data.answer || "",
+      contexts: data.contexts || []
+    };
+    
+    // 피드백 영역 표시
+    if (els.feedbackArea && currentSession.sessionId) {
+      els.feedbackArea.style.display = "block";
+      if (els.feedbackThanks) {
+        els.feedbackThanks.style.display = "none";
+      }
+      // 피드백 버튼 다시 활성화
+      if (els.feedbackLikeBtn) els.feedbackLikeBtn.disabled = false;
+      if (els.feedbackDislikeBtn) els.feedbackDislikeBtn.disabled = false;
+    }
     
   } catch (err) {
     console.error("[sendQuestion 오류]", err);
@@ -526,7 +485,7 @@ async function sendQuestion() {
     }
   } finally {
     if (els.sendBtn) {
-      els.sendBtn.disabled = false;
+    els.sendBtn.disabled = false;
       const btnText = els.sendBtn.querySelector(".btn-text");
       if (btnText) {
         btnText.textContent = "질문 보내기";
@@ -541,9 +500,9 @@ function renderContexts(contexts, usedKeyword = null) {
   els.contexts.innerHTML = "";
   
   if (els.contextCount) {
-    els.contextCount.textContent = `${contexts.length} 개`;
+  els.contextCount.textContent = `${contexts.length} 개`;
   }
-  
+
   if (!contexts.length) {
     els.contexts.innerHTML = `
       <div class="empty-state">
@@ -553,10 +512,10 @@ function renderContexts(contexts, usedKeyword = null) {
     `;
     return;
   }
-  
+
   const list = document.createElement("div");
   list.className = "context-cards";
-  
+
   // 사용된 키워드 정보 표시
   if (usedKeyword) {
     const filterInfo = document.createElement("div");
@@ -569,7 +528,7 @@ function renderContexts(contexts, usedKeyword = null) {
   contexts.forEach((c, idx) => {
     const card = document.createElement("article");
     card.className = "context-card";
-    
+
     const score = typeof c.score === "number" ? c.score.toFixed(3) : "N/A";
     const kw = c.keyword || "";
     
@@ -579,7 +538,7 @@ function renderContexts(contexts, usedKeyword = null) {
       if (c.score > 0.8) scoreClass = "score-high";
       else if (c.score > 0.6) scoreClass = "score-medium";
     }
-    
+
     card.innerHTML = `
       <header>
         <span class="ctx-index">#${idx + 1}</span>
@@ -591,7 +550,7 @@ function renderContexts(contexts, usedKeyword = null) {
     
     list.appendChild(card);
   });
-  
+
   els.contexts.appendChild(list);
 }
 
@@ -621,20 +580,20 @@ function init() {
   
   // 이벤트 바인딩
   if (els.sendBtn) {
-    els.sendBtn.addEventListener("click", sendQuestion);
+els.sendBtn.addEventListener("click", sendQuestion);
   }
-  
+
   if (els.question) {
-    els.question.addEventListener("keydown", (e) => {
+els.question.addEventListener("keydown", (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-        e.preventDefault();
-        sendQuestion();
-      }
-    });
+    e.preventDefault();
+    sendQuestion();
   }
-  
+});
+  }
+
   if (els.clearBtn) {
-    els.clearBtn.addEventListener("click", () => {
+els.clearBtn.addEventListener("click", () => {
       if (els.answer) {
         els.answer.innerHTML = `
           <div class="empty-state">
@@ -654,27 +613,14 @@ function init() {
       }
       
       if (els.contextCount) {
-        els.contextCount.textContent = "0 개";
+  els.contextCount.textContent = "0 개";
       }
       
-      setInfo("");
-    });
+  setInfo("");
+});
   }
   
-  if (els.refreshStatsBtn) {
-    els.refreshStatsBtn.addEventListener("click", async () => {
-      els.refreshStatsBtn.disabled = true;
-      const originalText = els.refreshStatsBtn.textContent;
-      els.refreshStatsBtn.textContent = "🔄";
-      
-      try {
-        await loadKeywordsFallback();
-      } finally {
-        els.refreshStatsBtn.disabled = false;
-        els.refreshStatsBtn.textContent = originalText;
-      }
-    });
-  }
+  // refreshStatsBtn은 제거됨 (문서 통계에 통합)
   
   // API 주소 클릭 시 변경 가능
   if (els.infoApiUrl) {
@@ -682,10 +628,10 @@ function init() {
       const currentUrl = API_BASE;
       const newUrl = prompt(
         "API 서버 주소를 입력하세요:\n\n" +
+        "기본값: http://localhost:8000\n\n" +
         "예시:\n" +
-        "- http://192.168.0.22:8000 (ifconfig에서 확인한 IP)\n" +
-        "- http://127.0.0.1:8000 (로컬호스트)\n" +
-        "- http://localhost:8000",
+        "- http://localhost:8000 (로컬)\n" +
+        "- http://192.168.0.22:8000 (네트워크 IP)",
         currentUrl
       );
       
@@ -739,7 +685,7 @@ function initTabs() {
   });
 }
 
-// 문서 통계 로드
+// 문서 통계 로드 (키워드 통계 포함)
 async function loadDocsStats() {
   const container = document.getElementById("docs-stats-content");
   if (!container) return;
@@ -754,14 +700,30 @@ async function loadDocsStats() {
       const stats = data.stats || {};
       const total = data.total_docs || 0;
       
-      let html = `<div style="margin-bottom: 16px;"><strong>총 문서 수: ${total}개</strong></div>`;
-      html += '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px;">';
+      // 총 문서 수와 키워드 개수 표시
+      const keywordCount = Object.keys(stats).length;
+      let html = `
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-bottom: 16px;">
+          <div style="padding: 10px 12px; background: var(--bg-input); border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+            <div style="font-size: 11px; color: var(--text-sub); margin-bottom: 2px;">총 문서 수</div>
+            <div style="font-size: 22px; font-weight: 700; color: var(--accent);">${total}</div>
+          </div>
+          <div style="padding: 10px 12px; background: var(--bg-input); border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+            <div style="font-size: 11px; color: var(--text-sub); margin-bottom: 2px;">키워드 종류</div>
+            <div style="font-size: 22px; font-weight: 700; color: var(--accent);">${keywordCount}</div>
+          </div>
+        </div>
+      `;
+      
+      // 키워드별 통계
+      html += '<div style="margin-bottom: 10px;"><strong style="color: var(--text-main); font-size: 14px;">키워드별 문서 개수</strong></div>';
+      html += '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px;">';
       
       for (const [kw, count] of Object.entries(stats).sort((a, b) => b[1] - a[1])) {
         html += `
-          <div style="padding: 12px; background: var(--bg-input); border-radius: var(--radius-md);">
-            <div style="font-weight: 600; color: var(--accent);">${kw}</div>
-            <div style="font-size: 24px; margin-top: 4px;">${count}</div>
+          <div style="padding: 8px 10px; background: var(--bg-input); border-radius: var(--radius-md); border: 1px solid var(--border-subtle); transition: var(--transition);">
+            <div style="font-weight: 600; color: var(--accent); font-size: 12px; margin-bottom: 2px;">${kw}</div>
+            <div style="font-size: 18px; font-weight: 700; color: var(--text-main);">${count}</div>
           </div>
         `;
       }
@@ -927,7 +889,7 @@ function initDocsGenerate() {
         result.innerHTML = html;
         form.reset();
         loadDocsStats();
-        loadApiStatusAndKeywords();
+loadApiStatusAndKeywords();
       } else {
         result.innerHTML = `<div class="docs-result error">오류: ${data.error || "알 수 없는 오류"}</div>`;
       }
@@ -981,6 +943,96 @@ function initDocsGroup() {
   });
 }
 
+// 질문 히스토리 관리
+function getHistory() {
+  try {
+    const history = localStorage.getItem("question_history");
+    return history ? JSON.parse(history) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveHistory(history) {
+  try {
+    // 최대 20개만 저장
+    const limited = history.slice(0, 20);
+    localStorage.setItem("question_history", JSON.stringify(limited));
+  } catch (e) {
+    console.error("히스토리 저장 실패:", e);
+  }
+}
+
+function addToHistory(question, answer, contexts) {
+  const history = getHistory();
+  const newEntry = {
+    id: Date.now(),
+    question: question,
+    answer: answer.substring(0, 200) + (answer.length > 200 ? "..." : ""), // 답변은 200자로 제한
+    contextCount: contexts.length,
+    timestamp: new Date().toLocaleString("ko-KR"),
+  };
+  
+  history.unshift(newEntry); // 최신이 위로
+  saveHistory(history);
+  renderHistory();
+}
+
+function renderHistory() {
+  if (!els.questionHistory) return;
+  
+  const history = getHistory();
+  
+  if (history.length === 0) {
+    els.questionHistory.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">💭</div>
+        <p>질문을 보내면 여기에 히스토리가 저장됩니다.</p>
+      </div>
+    `;
+    return;
+  }
+  
+  let html = '';
+  
+  history.forEach((entry) => {
+    html += `
+      <div class="history-item" 
+           onclick="const q = document.getElementById('question'); if(q) { q.value = ${JSON.stringify(entry.question)}; const btn = document.getElementById('send-btn'); if(btn) btn.click(); }">
+        <div class="history-item-header">
+          <div class="history-question">💬 ${entry.question}</div>
+          <div class="history-badge">📄 ${entry.contextCount}</div>
+        </div>
+        <div class="history-timestamp">${entry.timestamp}</div>
+      </div>
+    `;
+  });
+  
+  els.questionHistory.innerHTML = html;
+}
+
+function initHistory() {
+  // 히스토리 초기 렌더링
+  renderHistory();
+  
+  // 히스토리 지우기 버튼
+  if (els.clearHistoryBtn) {
+    els.clearHistoryBtn.addEventListener("click", () => {
+      if (confirm("모든 질문 히스토리를 삭제하시겠습니까?")) {
+        localStorage.removeItem("question_history");
+        renderHistory();
+      }
+    });
+  }
+  
+  // 문서 통계 새로고침 버튼
+  if (els.refreshDocsStatsBtn) {
+    els.refreshDocsStatsBtn.addEventListener("click", () => {
+      loadDocsStats();
+    });
+  }
+}
+
 // 접기/펼치기 기능
 function initCollapsible() {
   // 옵션 접기/펼치기
@@ -1010,6 +1062,89 @@ function initCollapsible() {
   }
 }
 
+// 피드백 전송 함수
+async function submitFeedback(feedbackType) {
+  if (!currentSession.sessionId) {
+    console.error("[피드백] 세션 ID가 없습니다.");
+    return;
+  }
+  
+  if (!els.feedbackLikeBtn || !els.feedbackDislikeBtn) {
+    return;
+  }
+  
+  // 버튼 비활성화
+  els.feedbackLikeBtn.disabled = true;
+  els.feedbackDislikeBtn.disabled = true;
+  
+  try {
+    const response = await fetch(`${API_BASE}/feedback`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        session_id: currentSession.sessionId,
+        question: currentSession.question,
+        answer: currentSession.answer,
+        contexts: currentSession.contexts,
+        feedback: feedbackType,  // "like" or "dislike"
+        comment: null
+      }),
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      // 감사 메시지 표시
+      if (els.feedbackThanks) {
+        els.feedbackThanks.style.display = "block";
+      }
+      console.log("[피드백] 피드백이 저장되었습니다:", feedbackType);
+    } else {
+      console.error("[피드백] 피드백 저장 실패:", data.error);
+      // 버튼 다시 활성화
+      els.feedbackLikeBtn.disabled = false;
+      els.feedbackDislikeBtn.disabled = false;
+    }
+  } catch (err) {
+    console.error("[피드백] 피드백 전송 오류:", err);
+    // 버튼 다시 활성화
+    els.feedbackLikeBtn.disabled = false;
+    els.feedbackDislikeBtn.disabled = false;
+  }
+}
+
+// 피드백 초기화 함수
+function initFeedback() {
+  if (els.feedbackLikeBtn) {
+    els.feedbackLikeBtn.addEventListener("click", () => {
+      submitFeedback("like");
+    });
+  }
+  
+  if (els.feedbackDislikeBtn) {
+    els.feedbackDislikeBtn.addEventListener("click", () => {
+      submitFeedback("dislike");
+    });
+  }
+  
+  // 답변 지우기 버튼 클릭 시 피드백 영역 숨기기
+  if (els.clearBtn) {
+    els.clearBtn.addEventListener("click", () => {
+      if (els.feedbackArea) {
+        els.feedbackArea.style.display = "none";
+      }
+      currentSession = {
+        sessionId: null,
+        question: null,
+        answer: null,
+        contexts: []
+      };
+    });
+  }
+}
+
 // 페이지 로드 시 초기화
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => {
@@ -1020,6 +1155,8 @@ if (document.readyState === "loading") {
     initDocsGenerate();
     initDocsGroup();
     initCollapsible();
+    initHistory();
+    initFeedback();
   });
 } else {
   init();
@@ -1029,4 +1166,6 @@ if (document.readyState === "loading") {
   initDocsGenerate();
   initDocsGroup();
   initCollapsible();
+  initHistory();
+  initFeedback();
 }

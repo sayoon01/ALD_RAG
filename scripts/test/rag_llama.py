@@ -19,9 +19,15 @@
 """
 
 import argparse
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
+
+# rag_core import를 위해 경로 추가
+BASE_DIR = Path(__file__).resolve().parent.parent.parent  # ~/ald-rag-lab
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 import rag_core  # rag_core 모듈 전체 import
 
@@ -30,7 +36,6 @@ generate_answer = rag_core.generate_answer
 get_keyword_stats = getattr(rag_core, "get_keyword_stats", None)
 MODEL_INFO: Dict[str, Any] = getattr(rag_core, "MODEL_INFO", {})
 
-BASE_DIR = Path(__file__).resolve().parent.parent  # ~/ald-rag-lab
 LOG_DIR = BASE_DIR / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 

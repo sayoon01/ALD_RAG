@@ -9,16 +9,23 @@ from typing import List, Optional
 # ============================================
 
 BASE_DIR = Path(__file__).resolve().parent.parent  # ~/ald-rag-lab
+FEEDBACK_PATH = BASE_DIR / "feedback" / "feedback_data.json"
+
 if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
 # rag_core 함수들 로딩
-from rag_core import generate_answer, get_keyword_stats, reload_documents
+from rag_core import generate_answer, get_keyword_stats, reload_documents, load_feedback_scores
 
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import json
+from datetime import datetime
+from typing import Optional
+import uuid
+from datetime import datetime
+from typing import Optional
 
 
 # ============================================
@@ -65,6 +72,16 @@ class ChatResponse(BaseModel):
     answer: str
     contexts: List[ContextItem]
     used_keyword: str
+    session_id: Optional[str] = None  # 피드백 추적용 세션 ID
+
+
+class FeedbackRequest(BaseModel):
+    session_id: str
+    question: str
+    answer: str
+    contexts: List[ContextItem]
+    feedback: str  # "like" or "dislike"
+    comment: Optional[str] = None
 
 
 # ============================================
@@ -92,6 +109,7 @@ def root():
         "keywords": keywords,
         "num_docs": num_docs,
         "keyword_list": keyword_list,
+        "device": MODEL_INFO.get("device", "unknown"),
         "note": "POST /chat 으로 질문할 수 있습니다.",
         "endpoints": {
             "chat": "POST /chat - 질문하기",
@@ -180,11 +198,104 @@ def chat(req: ChatRequest):
         if keyword_counts:
             used_keyword = max(keyword_counts.items(), key=lambda x: x[1])[0]
 
+    import uuid
+    session_id = str(uuid.uuid4())[:8]  # 짧은 세션 ID 생성
+    
     return ChatResponse(
         answer=answer or "답변이 생성되지 않았습니다.",
         contexts=context_items,
-        used_keyword=used_keyword
+        used_keyword=used_keyword,
+        session_id=session_id
     )
+
+
+# ============================================
+# 피드백 수집 엔드포인트
+# ============================================
+
+@app.post("/feedback")
+def submit_feedback(req: FeedbackRequest):
+    """
+    사용자 피드백 수집 (👍/👎)
+    """
+    try:
+        # 피드백 데이터 로드
+        if FEEDBACK_PATH.exists():
+            with FEEDBACK_PATH.open("r", encoding="utf-8") as f:
+                feedback_data = json.load(f)
+        else:
+            feedback_data = {"feedbacks": []}
+        
+        # 새 피드백 추가
+        feedback_entry = {
+            "session_id": req.session_id,
+            "question": req.question,
+            "answer": req.answer,
+            "contexts": [{"text": ctx.text, "score": ctx.score, "keyword": ctx.keyword} for ctx in req.contexts],
+            "feedback": req.feedback,  # "like" or "dislike"
+            "comment": req.comment,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        feedback_data["feedbacks"].append(feedback_entry)
+        
+        # 파일에 저장
+        with FEEDBACK_PATH.open("w", encoding="utf-8") as f:
+            json.dump(feedback_data, f, ensure_ascii=False, indent=2)
+        
+        # 피드백 기반 점수 조정 갱신 (강제 리로드)
+        from rag_core import load_feedback_scores
+        load_feedback_scores(force_reload=True)
+        
+        print(f"[+] 피드백 수집: {req.feedback} (session_id: {req.session_id})")
+        print(f"[+] 피드백이 저장되었고, 검색 점수가 업데이트되었습니다.")
+        
+        return {
+            "success": True,
+            "message": "피드백이 저장되었고, 다음 검색부터 반영됩니다.",
+            "session_id": req.session_id
+        }
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] 피드백 저장 실패: {traceback.format_exc()}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
+@app.get("/feedback/stats")
+def get_feedback_stats():
+    """피드백 통계 조회"""
+    try:
+        if not FEEDBACK_PATH.exists():
+            return {
+                "total": 0,
+                "likes": 0,
+                "dislikes": 0,
+                "recent_feedbacks": []
+            }
+        
+        with FEEDBACK_PATH.open("r", encoding="utf-8") as f:
+            feedback_data = json.load(f)
+        
+        feedbacks = feedback_data.get("feedbacks", [])
+        likes = sum(1 for fb in feedbacks if fb.get("feedback") == "like")
+        dislikes = sum(1 for fb in feedbacks if fb.get("feedback") == "dislike")
+        
+        # 최근 10개 피드백
+        recent = sorted(feedbacks, key=lambda x: x.get("timestamp", ""), reverse=True)[:10]
+        
+        return {
+            "total": len(feedbacks),
+            "likes": likes,
+            "dislikes": dislikes,
+            "recent_feedbacks": recent
+        }
+    except Exception as e:
+        return {
+            "error": str(e)
+        }
 
 
 # ============================================
@@ -249,13 +360,20 @@ def reload_docs():
 def docs_stats():
     """키워드별 문서 개수 통계"""
     try:
-        sys.path.insert(0, str(BASE_DIR))
-        from scripts.manage_docs import load_raw_docs
+        # 직접 JSON 파일 읽기 (리스트 형태로)
+        docs_path = BASE_DIR / "docs" / "docs_ald.json"
+        with open(docs_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
         
-        docs = load_raw_docs()
+        docs = data.get("documents", [])
+        if not isinstance(docs, list):
+            docs = []
+        
         keyword_counts = {}
         
         for item in docs:
+            if not isinstance(item, dict):
+                continue
             keywords = item.get("keywords", [])
             if isinstance(keywords, list):
                 for kw in keywords:
@@ -285,13 +403,20 @@ def docs_stats():
 def docs_group():
     """키워드별로 그룹화된 문서 목록"""
     try:
-        sys.path.insert(0, str(BASE_DIR))
-        from scripts.manage_docs import load_raw_docs
+        # 직접 JSON 파일 읽기 (리스트 형태로)
+        docs_path = BASE_DIR / "docs" / "docs_ald.json"
+        with open(docs_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
         
-        docs = load_raw_docs()
+        docs = data.get("documents", [])
+        if not isinstance(docs, list):
+            docs = []
+        
         grouped = {}
         
         for item in docs:
+            if not isinstance(item, dict):
+                continue
             keywords = item.get("keywords", [])
             if isinstance(keywords, list):
                 for kw in keywords:
@@ -334,20 +459,34 @@ def docs_group():
 def docs_add(keyword: str = Form(...), text: str = Form(...)):
     """새 문서 추가"""
     try:
-        sys.path.insert(0, str(BASE_DIR))
-        from scripts.manage_docs import load_raw_docs, save_raw_docs, get_next_id
+        # 직접 JSON 파일 읽기
+        docs_path = BASE_DIR / "docs" / "docs_ald.json"
+        with open(docs_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
         
-        docs = load_raw_docs()
+        docs = data.get("documents", [])
+        if not isinstance(docs, list):
+            docs = []
+        
         keywords_list = [kw.strip() for kw in keyword.split(",") if kw.strip()]
         
-        next_id = get_next_id(docs)
+        # 다음 ID 계산
+        next_id = 1
+        if docs:
+            max_id = max((item.get("id", 0) for item in docs if isinstance(item, dict)), default=0)
+            next_id = max_id + 1
+        
         new_item = {
             "id": next_id,
             "keywords": keywords_list,
             "text": text
         }
         docs.append(new_item)
-        save_raw_docs(docs)
+        
+        # 파일 저장
+        data["documents"] = docs
+        with open(docs_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
         
         # 문서 재로드
         reload_documents()
@@ -375,8 +514,7 @@ async def docs_extract(
     """텍스트/PDF 파일에서 키워드 관련 문장 추출"""
     try:
         sys.path.insert(0, str(BASE_DIR))
-        from scripts.extract_from_docs import extract_from_text, extract_from_pdf, filter_quality_sentences
-        from scripts.manage_docs import load_raw_docs, save_raw_docs, get_next_id
+        from scripts.doc_management.extract_from_docs import extract_from_text, extract_from_pdf, filter_quality_sentences
         from pathlib import Path
         import tempfile
         
@@ -405,10 +543,22 @@ async def docs_extract(
             results[keyword] = filter_quality_sentences(results.get(keyword, []))
         
         # 중복 제거 및 문서 추가
-        docs = load_raw_docs()
-        existing_texts = {item.get("text", "") for item in docs}
+        docs_path = BASE_DIR / "docs" / "docs_ald.json"
+        with open(docs_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        
+        docs = data.get("documents", [])
+        if not isinstance(docs, list):
+            docs = []
+        
+        existing_texts = {item.get("text", "") for item in docs if isinstance(item, dict)}
         new_count = 0
-        next_id = get_next_id(docs)
+        
+        # 다음 ID 계산
+        next_id = 1
+        if docs:
+            max_id = max((item.get("id", 0) for item in docs if isinstance(item, dict)), default=0)
+            next_id = max_id + 1
         
         extracted_items = []
         for keyword in keywords_list:
@@ -427,7 +577,10 @@ async def docs_extract(
                     new_count += 1
         
         if new_count > 0:
-            save_raw_docs(docs)
+            # 파일 저장
+            data["documents"] = docs
+            with open(docs_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
             reload_documents()
         
         return {
@@ -455,8 +608,7 @@ def docs_generate(
     """LLM 또는 템플릿을 사용하여 문서 생성"""
     try:
         sys.path.insert(0, str(BASE_DIR))
-        from scripts.generate_docs import run_llm_mode, run_template_mode
-        from scripts.manage_docs import load_raw_docs, save_raw_docs, get_next_id
+        from scripts.doc_management.generate_docs import run_llm_mode, run_template_mode
         
         if mode == "llm":
             # LLM 모드 (간단한 버전 - 실제로는 generate_with_llm 호출)
@@ -471,9 +623,19 @@ def docs_generate(
                     "error": "LLM 모델이 로드되지 않았습니다"
                 }
             
-            docs = load_raw_docs()
+            # 직접 JSON 파일 읽기
+            docs_path = BASE_DIR / "docs" / "docs_ald.json"
+            with open(docs_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            
+            docs = data.get("documents", [])
+            if not isinstance(docs, list):
+                docs = []
+            
             existing_texts = []
             for item in docs:
+                if not isinstance(item, dict):
+                    continue
                 keywords = item.get("keywords", [])
                 if isinstance(keywords, list) and keyword in keywords:
                     existing_texts.append(item.get("text", ""))
@@ -562,7 +724,12 @@ def docs_generate(
                 }
             
             # 문서에 추가
-            next_id = get_next_id(docs)
+            # 다음 ID 계산
+            next_id = 1
+            if docs:
+                max_id = max((item.get("id", 0) for item in docs if isinstance(item, dict)), default=0)
+                next_id = max_id + 1
+            
             new_items = []
             for text in new_texts:
                 new_item = {
@@ -574,7 +741,10 @@ def docs_generate(
                 new_items.append(new_item)
                 next_id += 1
             
-            save_raw_docs(docs)
+            # 파일 저장
+            data["documents"] = docs
+            with open(docs_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
             reload_documents()
             
             return {
@@ -585,7 +755,7 @@ def docs_generate(
             }
             
         elif mode == "template":
-            from scripts.generate_docs import generate_from_template
+            from scripts.doc_management.generate_docs import generate_from_template
             
             new_texts = generate_from_template(keyword, count)
             
@@ -595,10 +765,22 @@ def docs_generate(
                     "error": f"'{keyword}'에 대한 템플릿이 없습니다"
                 }
             
-            docs = load_raw_docs()
-            next_id = get_next_id(docs)
-            new_items = []
+            # 직접 JSON 파일 읽기
+            docs_path = BASE_DIR / "docs" / "docs_ald.json"
+            with open(docs_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
             
+            docs = data.get("documents", [])
+            if not isinstance(docs, list):
+                docs = []
+            
+            # 다음 ID 계산
+            next_id = 1
+            if docs:
+                max_id = max((item.get("id", 0) for item in docs if isinstance(item, dict)), default=0)
+                next_id = max_id + 1
+            
+            new_items = []
             for text in new_texts:
                 new_item = {
                     "id": next_id,
@@ -609,7 +791,10 @@ def docs_generate(
                 new_items.append(new_item)
                 next_id += 1
             
-            save_raw_docs(docs)
+            # 파일 저장
+            data["documents"] = docs
+            with open(docs_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
             reload_documents()
             
             return {
