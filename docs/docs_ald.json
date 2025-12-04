@@ -1870,6 +1870,345 @@
         "Pressure"
       ],
       "text": "Purge 중 Pressure가 불안정하면 Precursor 흡착층이 완전히 제거되지 않아 cycle 간 성장률 편차가 증가한다."
+    },
+    {
+      "id": 221,
+      "keywords": [
+        "로드락",
+        "Gate Valve",
+        "챔버",
+        "장비 구조"
+      ],
+      "text": "ALD 장비는 크게 Load Lock(로드락), Gate Valve(게이트 밸브, VG12/VG13 등), Main Chamber(메인 챔버)로 구성된다. 웨이퍼는 외부 대기 환경에서 먼저 Load Lock에 로딩되고, Load Lock 내부 압력이 진공 펌프를 통해 Main Chamber와 유사한 수준까지 낮아진 뒤 Gate Valve를 열어 Main Chamber로 이송된다. Load Lock은 외부 대기압과 고진공 공정 챔버 사이에서 압력을 단계적으로 맞춰주는 완충 구역이며, 웨이퍼의 입·출구 역할을 한다. Gate Valve(VG12/VG13)는 Load Lock과 Main Chamber 사이를 물리적으로 차단·연결하는 밸브로, 두 공간의 압력 차이가 너무 클 때는 열리지 않도록 인터락이 걸린다. Main Chamber는 실제 ALD 공정(전구체 주입, 퍼지, 플라즈마 처리 등)이 이루어지는 핵심 공정 공간으로, 공정 동안에는 안정적인 진공도와 온도가 유지되어야 한다. 이 구조를 통해 웨이퍼를 외부에서 반복적으로 투입하면서도 Main Chamber의 공정 환경은 최대한 일정하게 유지할 수 있고, 파티클 발생과 오염을 줄일 수 있다."
+    },
+    {
+      "id": 222,
+      "keywords": [
+        "로드락",
+        "Gate Valve",
+        "챔버",
+        "장비 구조"
+      ],
+      "text": "ALD 장비는 Load Lock–Gate Valve–Main Chamber 구조로 이루어지며, Load Lock에서 압력을 진공으로 낮춘 뒤 Gate Valve를 열어 웨이퍼를 Main Chamber로 이송한다. 이 구조는 외부 환경과 공정 환경을 분리해 오염을 줄이고 택타임을 단축한다."
+    },
+    {
+      "id": 223,
+      "keywords": [
+        "로드락",
+        "역할",
+        "압력"
+      ],
+      "text": "Load Lock은 외부 대기압과 Main Chamber의 고진공 환경 사이의 완충 공간으로, 로딩된 웨이퍼의 압력을 단계적으로 낮춘 뒤 공정 챔버로 이송하도록 한다."
+    },
+    {
+      "id": 224,
+      "keywords": [
+        "챔버",
+        "로드락",
+        "차이점"
+      ],
+      "text": "Main Chamber는 실제 ALD 반응이 일어나는 공정 공간이며 온도·압력·가스 유량이 정밀 제어된다. Load Lock은 외부와의 인터페이스 역할로 압력 전환과 웨이퍼 입출구를 담당한다."
+    },
+    {
+      "id": 225,
+      "keywords": [
+        "Gate Valve",
+        "VG12",
+        "VG13",
+        "역할"
+      ],
+      "text": "Gate Valve(VG12/VG13)는 Load Lock과 Main Chamber 사이를 차단 또는 연결하는 밸브로, 두 챔버의 압력이 일정 조건을 만족할 때만 열린다."
+    },
+    {
+      "id": 226,
+      "keywords": [
+        "로드락",
+        "Gate Valve",
+        "이송"
+      ],
+      "text": "웨이퍼 이송 절차는 Load Lock 로딩 → 압력 펌프다운 → Gate Valve 오픈 → Main Chamber로 웨이퍼 이동 → Gate Valve 클로즈 순으로 진행된다."
+    },
+    {
+      "id": 227,
+      "keywords": [
+        "로드락",
+        "필요성",
+        "진공"
+      ],
+      "text": "Load Lock이 없다면 웨이퍼 로딩 시마다 Main Chamber를 대기압까지 올려야 하며, 이는 공정 안정성과 생산성 모두를 크게 저하시킨다."
+    },
+    {
+      "id": 228,
+      "keywords": [
+        "Gate Valve",
+        "인터락",
+        "압력"
+      ],
+      "text": "Load Lock과 Main Chamber 압력 차이가 허용 범위를 벗어나면 Gate Valve는 인터락에 의해 열리지 않아 장비 오염과 파티클 발생을 예방한다."
+    },
+    {
+      "id": 229,
+      "keywords": [
+        "로드락",
+        "고장",
+        "위험"
+      ],
+      "text": "Load Lock 고장은 웨이퍼 이송 실패로 이어져 장비 가동률을 낮추며, 도어 누설 시에는 오염이 Gate Valve와 Main Chamber로 전파될 수 있다."
+    },
+    {
+      "id": 230,
+      "keywords": [
+        "처리량",
+        "로드락",
+        "장비 구조"
+      ],
+      "text": "Load Lock–Gate Valve–Main Chamber 구조는 공정과 로딩을 분리하여 택타임을 단축하고 Main Chamber의 안정적인 공정 조건을 유지하도록 설계되었다."
+    },
+    {
+      "id": 231,
+      "keywords": [
+        "모니터링",
+        "로드락",
+        "Gate Valve",
+        "압력"
+      ],
+      "text": "장비 상태 모니터링 시 Load Lock 압력, Main Chamber 압력, Gate Valve 개폐 상태를 함께 확인하면 웨이퍼 이송 시퀀스의 정상 여부를 판단할 수 있다."
+    },
+    {
+      "id": 232,
+      "keywords": [
+        "로드락",
+        "Gate Valve",
+        "장비 구조"
+      ],
+      "text": "Load Lock과 Gate Valve는 공정 챔버를 외부로부터 고립시키는 역할을 하며, 안정적인 진공 유지와 오염 방지에 필수적인 구조를 제공한다."
+    },
+    {
+      "id": 233,
+      "keywords": [
+        "Gate Valve",
+        "VG12",
+        "VG13",
+        "기능"
+      ],
+      "text": "VG12와 VG13은 Load Lock과 Main Chamber 사이의 게이트 밸브 개폐 상태를 제어하는 신호이며, 압력이나 온도를 측정하는 센서가 아니다."
+    },
+    {
+      "id": 234,
+      "keywords": [
+        "Gate Valve",
+        "센서",
+        "차이점"
+      ],
+      "text": "VG12/VG13은 밸브 개폐 신호이고 PressureSensor는 압력을 측정하는 센서로, 두 신호는 기능적으로 완전히 다르다."
+    },
+    {
+      "id": 235,
+      "keywords": [
+        "Gate Valve",
+        "이송",
+        "시퀀스"
+      ],
+      "text": "웨이퍼 이송 시 Load Lock과 Main Chamber의 압력이 일정 범위에 도달하면 VG12/VG13이 Open 상태로 전환되어 두 공간이 연결된다."
+    },
+    {
+      "id": 236,
+      "keywords": [
+        "Gate Valve",
+        "인터락",
+        "압력"
+      ],
+      "text": "압력 차이가 허용치를 초과하면 VG12/VG13은 인터락에 의해 열리지 않아 급격한 기체 이동과 파티클 유입을 방지한다."
+    },
+    {
+      "id": 237,
+      "keywords": [
+        "VG12",
+        "VG13",
+        "모니터링"
+      ],
+      "text": "VG12/VG13의 상태는 Load Lock과 Main Chamber의 연결 여부를 나타내므로 웨이퍼 이송 모니터링에서 중요한 지표가 된다."
+    },
+    {
+      "id": 238,
+      "keywords": [
+        "Gate Valve",
+        "오류",
+        "불일치"
+      ],
+      "text": "VG12/VG13 신호가 Open으로 표시되지만 Load Lock 압력이 급변하지 않는다면 실제 밸브 개폐 상태와 신호가 불일치하는 I/O 오류 가능성이 있다."
+    },
+    {
+      "id": 239,
+      "keywords": [
+        "Gate Valve",
+        "압력 센서",
+        "혼동"
+      ],
+      "text": "Gate Valve 신호는 개폐 상태만 나타내며 압력 값을 제공하지 않으므로, VG12/VG13을 압력 센서로 해석하는 것은 잘못된 판단이다."
+    },
+    {
+      "id": 240,
+      "keywords": [
+        "Gate Valve",
+        "비정상",
+        "압력 상승"
+      ],
+      "text": "VG12/VG13이 Open인데 Load Lock 압력이 상승한다면 Main Chamber 또는 배관의 누설을 의심해야 한다."
+    },
+    {
+      "id": 241,
+      "keywords": [
+        "Gate Valve",
+        "시퀀스",
+        "진공"
+      ],
+      "text": "Gate Valve는 Load Lock과 Main Chamber 압력이 진공 조건에서 충분히 수렴한 뒤에만 Open되도록 시퀀스가 설정된다."
+    },
+    {
+      "id": 242,
+      "keywords": [
+        "Gate Valve",
+        "안전",
+        "파티클"
+      ],
+      "text": "VG12/VG13의 인터락 로직은 파티클 발생과 챔버 오염을 방지하기 위해 압력 안정 여부를 엄격히 확인한 뒤에만 밸브를 연다."
+    },
+    {
+      "id": 243,
+      "keywords": [
+        "압력",
+        "Gate Valve",
+        "로드락",
+        "챔버"
+      ],
+      "text": "Load Lock과 Main Chamber 압력이 충분히 수렴하지 않으면 Gate Valve는 Open되지 않아 웨이퍼 이송 시 압력 충돌로 인한 파티클 발생을 방지한다."
+    },
+    {
+      "id": 244,
+      "keywords": [
+        "로드락",
+        "압력",
+        "이송"
+      ],
+      "text": "웨이퍼 이송 시 Load Lock 압력이 목표 진공에 도달하지 않으면 이송 시퀀스는 중단되고 Gate Valve는 Close 상태를 유지한다."
+    },
+    {
+      "id": 245,
+      "keywords": [
+        "Gate Valve",
+        "압력",
+        "비정상"
+      ],
+      "text": "Gate Valve가 Open 상태인데 Load Lock 압력이 상승한다면 Main Chamber 또는 연결 배관의 누설 가능성을 고려해야 한다."
+    },
+    {
+      "id": 246,
+      "keywords": [
+        "압력",
+        "안정성",
+        "로드락"
+      ],
+      "text": "Load Lock 펌프다운 속도가 비정상적으로 느리면 압력 안정이 지연되어 Gate Valve Open 시퀀스가 반복적으로 대기 상태에 머무를 수 있다."
+    },
+    {
+      "id": 247,
+      "keywords": [
+        "Gate Valve",
+        "센서",
+        "혼동"
+      ],
+      "text": "Gate Valve 신호는 밸브 개폐 상태만 나타내므로 Load Lock 압력 센서 데이터와 혼동해서는 안 된다."
+    },
+    {
+      "id": 248,
+      "keywords": [
+        "챔버",
+        "로드락",
+        "압력"
+      ],
+      "text": "Main Chamber 압력이 불안정할 경우 Load Lock과의 압력 매칭 과정이 반복되며, 이는 웨이퍼 이송 딜레이로 이어질 수 있다."
+    },
+    {
+      "id": 249,
+      "keywords": [
+        "Gate Valve",
+        "시퀀스",
+        "안전"
+      ],
+      "text": "Gate Valve는 Load Lock의 펌프다운 완료, 도어 닫힘, 압력 안정 조건이 모두 충족되지 않으면 안전 인터락에 의해 열리지 않는다."
+    },
+    {
+      "id": 250,
+      "keywords": [
+        "압력",
+        "로드락",
+        "복구"
+      ],
+      "text": "Load Lock 압력이 설정값 아래로 충분히 떨어지지 않으면 Recovery 루틴이 실행되어 추가 펌프다운 또는 밸브 점검 단계가 진행된다."
+    },
+    {
+      "id": 251,
+      "keywords": [
+        "Gate Valve",
+        "챔버",
+        "유량"
+      ],
+      "text": "Gate Valve가 급격히 열릴 경우 Load Lock에서 Main Chamber로 기체가 빠르게 이동해 공정 챔버 내 파티클 증가를 유발할 수 있다."
+    },
+    {
+      "id": 252,
+      "keywords": [
+        "로드락",
+        "밸브",
+        "인터락"
+      ],
+      "text": "Load Lock 도어가 완전히 닫혀 있지 않으면 Gate Valve 인터락이 작동하여 Main Chamber와 연결되지 않도록 한다."
+    },
+    {
+      "id": 253,
+      "keywords": [
+        "압력",
+        "모니터링",
+        "로드락"
+      ],
+      "text": "Load Lock 압력이 펌프다운 중 갑자기 상승한다면 배기 라인 누설 또는 도어 시일 손상이 우선적으로 의심된다."
+    },
+    {
+      "id": 254,
+      "keywords": [
+        "Gate Valve",
+        "압력",
+        "시퀀스"
+      ],
+      "text": "Load Lock과 Main Chamber의 압력이 0.1 Torr 이내로 수렴했을 때만 Gate Valve가 Open되도록 설정하는 경우가 많다."
+    },
+    {
+      "id": 255,
+      "keywords": [
+        "로드락",
+        "이송",
+        "안정성"
+      ],
+      "text": "Load Lock 압력이 안정되지 않은 상태에서 이송을 시도하면 웨이퍼 표면에 미세 기체 충격이 발생해 공정 결함의 원인이 될 수 있다."
+    },
+    {
+      "id": 256,
+      "keywords": [
+        "챔버",
+        "압력",
+        "밸브"
+      ],
+      "text": "Main Chamber 압력이 갑자기 상승하는 경우 Gate Valve는 자동으로 Close되어 공정 공간을 보호하도록 설계되어 있다."
+    },
+    {
+      "id": 257,
+      "keywords": [
+        "Gate Valve",
+        "로드락",
+        "이송 오류"
+      ],
+      "text": "웨이퍼 감지 센서와 Gate Valve 개폐 시점이 일치하지 않으면 Transfer Error가 발생하며, 이때 Load Lock 압력과 밸브 상태를 함께 점검해야 한다."
     }
   ]
 }

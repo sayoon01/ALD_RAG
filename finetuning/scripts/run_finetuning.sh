@@ -10,9 +10,9 @@ echo "=========================================="
 echo "Fine-tuning 실행"
 echo "=========================================="
 
-# 1단계: 학습 데이터 생성
+# 1단계: 학습 데이터 생성 (개선된 버전)
 echo ""
-echo "[1/3] 학습 데이터 생성 중..."
+echo "[1/3] 개선된 학습 데이터 생성 중..."
 python3 finetuning/scripts/prepare_finetuning_data.py
 
 if [ $? -ne 0 ]; then

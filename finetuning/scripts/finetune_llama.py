@@ -126,7 +126,7 @@ def main():
     parser.add_argument(
         "--model_name",
         type=str,
-        default="google/gemma-3-27b-it",
+        default="Qwen/Qwen2.5-7B-Instruct",
         help="기본 모델 이름"
     )
     parser.add_argument(
@@ -144,7 +144,7 @@ def main():
     parser.add_argument(
         "--output_dir",
         type=str,
-        default=str(BASE_DIR / "finetuning" / "models" / "gemma-3-27b-ald-lora"),
+        default=str(BASE_DIR / "finetuning" / "models" / "qwen-ald-lora"),
         help="출력 디렉토리"
     )
     parser.add_argument(
@@ -222,7 +222,7 @@ def main():
         logging_steps=10,
         eval_steps=50,
         save_steps=100,
-        evaluation_strategy="steps",
+        eval_strategy="steps",
         save_total_limit=3,
         load_best_model_at_end=True,
         report_to="none",

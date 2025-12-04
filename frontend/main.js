@@ -128,10 +128,10 @@ function renderSystemInfo(data) {
     els.infoApiUrl.textContent = API_BASE;
   }
   
-  // num_docs가 있으면 우선 사용, 없으면 keywords에서 계산
-  const numDocs = data.num_docs !== undefined 
+  // num_docs가 있으면 우선 사용 (keywords 합산은 중복 카운트이므로 사용하지 않음)
+  const numDocs = data.num_docs !== undefined && data.num_docs > 0
     ? data.num_docs 
-    : Object.values(data.keywords || {}).reduce((sum, count) => sum + count, 0);
+    : 0;
   
   // keyword_list가 있으면 우선 사용, 없으면 keywords에서 추출
   const keywordList = data.keyword_list && data.keyword_list.length > 0

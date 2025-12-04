@@ -30,6 +30,10 @@ DOC_KEYWORDS: List[str] = []
 DOC_ITEMS: List[Dict[str, Any]] = []
 DOC_EMBEDS: Optional[np.ndarray] = None
 
+# 해시 테이블 인덱스 (키워드 -> 문서 인덱스 리스트)
+KEYWORD_INDEX: Dict[str, List[int]] = {}  # keyword -> [doc_idx1, doc_idx2, ...]
+KEYWORD_INDEX_NORMALIZED: Dict[str, List[int]] = {}  # normalized keyword -> [doc_idx1, doc_idx2, ...]
+
 DEVICE: Optional[torch.device] = None
 SEMB_MODEL: Optional[SentenceTransformer] = None
 TOKENIZER: Optional[AutoTokenizer] = None
@@ -140,9 +144,32 @@ def load_docs(path: Path = DOCS_PATH):
 # 2) 모델 초기화
 # ==============================
 
+def _build_keyword_index():
+    """키워드 기반 해시 테이블 인덱스 구축"""
+    global KEYWORD_INDEX, KEYWORD_INDEX_NORMALIZED
+    
+    KEYWORD_INDEX = {}
+    KEYWORD_INDEX_NORMALIZED = {}
+    
+    for idx, keyword in enumerate(DOC_KEYWORDS):
+        # 정확한 키워드 매칭
+        if keyword not in KEYWORD_INDEX:
+            KEYWORD_INDEX[keyword] = []
+        KEYWORD_INDEX[keyword].append(idx)
+        
+        # 정규화된 키워드 매칭 (동의어 지원)
+        normalized = normalize_keyword(keyword)
+        if normalized not in KEYWORD_INDEX_NORMALIZED:
+            KEYWORD_INDEX_NORMALIZED[normalized] = []
+        KEYWORD_INDEX_NORMALIZED[normalized].append(idx)
+    
+    print(f"[+] 키워드 인덱스 구축 완료: {len(KEYWORD_INDEX)}개 키워드")
+
+
 def _init_models_if_needed():
     global DOCS, DOC_KEYWORDS, DOC_ITEMS, DOC_EMBEDS
     global SEMB_MODEL, TOKENIZER, LLM, DEVICE, DTYPE, MODEL_INFO
+    global KEYWORD_INDEX, KEYWORD_INDEX_NORMALIZED
 
     if DOC_EMBEDS is not None:
         # 문서는 이미 로드되었지만 피드백 점수는 다시 로드 (최신 상태 유지)
@@ -154,6 +181,9 @@ def _init_models_if_needed():
     
     # 문서 로딩
     DOCS, DOC_KEYWORDS, DOC_ITEMS = load_docs()
+    
+    # 키워드 인덱스 구축 (해시 테이블)
+    _build_keyword_index()
 
     # 임베딩 모델
     print(f"[+] Embedding model 로딩 중: {EMBED_MODEL_NAME}")
@@ -218,7 +248,7 @@ def _init_models_if_needed():
 def reload_documents():
     """
     docs_ald.json 파일을 다시 로드하고 임베딩을 재생성합니다.
-    모델은 이미 로드되어 있어야 합니다 (EMB_MODEL이 있어야 함).
+    모델은 이미 로드되어 있어야 합니다 (SEMB_MODEL이 있어야 함).
     """
     global DOCS, DOC_KEYWORDS, DOC_ITEMS, DOC_EMBEDS, MODEL_INFO, SEMB_MODEL
     
@@ -231,6 +261,9 @@ def reload_documents():
     
     # 문서 다시 로딩
     DOCS, DOC_KEYWORDS, DOC_ITEMS = load_docs()
+    
+    # 키워드 인덱스 재구축 (해시 테이블)
+    _build_keyword_index()
     
     # 임베딩 재생성
     DOC_EMBEDS = SEMB_MODEL.encode(
@@ -476,7 +509,7 @@ def retrieve(
     hybrid_weight: float = 0.3,  # 키워드 점수 가중치 (0.0 = 의미 검색만, 1.0 = 키워드 검색만)
 ):
     """
-    하이브리드 검색: 키워드 매칭 + 의미 기반 검색
+    하이브리드 검색: 키워드 매칭 + 의미 기반 검색 (해시 테이블 최적화)
     
     Args:
         query: 검색 쿼리
@@ -486,57 +519,108 @@ def retrieve(
     """
     _init_models_if_needed()
 
-    # 1. 의미 기반 검색 (기존 방식)
+    # 1. 해시 테이블을 사용한 키워드 기반 후보 문서 필터링 (O(1) 조회)
+    candidate_idxs = None
+    
+    # 쿼리에서 키워드 추출
+    query_keywords = extract_keywords_from_query(query)
+    
+    if query_keywords or filter_keyword:
+        candidate_idxs_set = set()
+        
+        # 쿼리 키워드로 후보 문서 찾기
+        for kw in query_keywords:
+            # 정확한 키워드 매칭
+            if kw in KEYWORD_INDEX:
+                candidate_idxs_set.update(KEYWORD_INDEX[kw])
+            # 정규화된 키워드 매칭
+            normalized_kw = normalize_keyword(kw)
+            if normalized_kw in KEYWORD_INDEX_NORMALIZED:
+                candidate_idxs_set.update(KEYWORD_INDEX_NORMALIZED[normalized_kw])
+        
+        # 필터 키워드 적용
+        if filter_keyword:
+            filter_idxs_set = set()
+            # 정확한 키워드 매칭
+            if filter_keyword in KEYWORD_INDEX:
+                filter_idxs_set.update(KEYWORD_INDEX[filter_keyword])
+            # 정규화된 키워드 매칭
+            filter_normalized = normalize_keyword(filter_keyword)
+            if filter_normalized in KEYWORD_INDEX_NORMALIZED:
+                filter_idxs_set.update(KEYWORD_INDEX_NORMALIZED[filter_normalized])
+            
+            if candidate_idxs_set:
+                # 교집합: 쿼리 키워드와 필터 키워드 모두 만족
+                candidate_idxs_set = candidate_idxs_set & filter_idxs_set
+            else:
+                # 필터만 적용
+                candidate_idxs_set = filter_idxs_set
+        
+        if candidate_idxs_set:
+            candidate_idxs = list(candidate_idxs_set)
+    
+    # 필터 키워드만 있고 쿼리 키워드가 없는 경우
+    if filter_keyword and not query_keywords and candidate_idxs is None:
+        candidate_idxs_set = set()
+        if filter_keyword in KEYWORD_INDEX:
+            candidate_idxs_set.update(KEYWORD_INDEX[filter_keyword])
+        filter_normalized = normalize_keyword(filter_keyword)
+        if filter_normalized in KEYWORD_INDEX_NORMALIZED:
+            candidate_idxs_set.update(KEYWORD_INDEX_NORMALIZED[filter_normalized])
+        if candidate_idxs_set:
+            candidate_idxs = list(candidate_idxs_set)
+    
+    # 해당 keyword 문서가 없는 경우
+    if (filter_keyword or query_keywords) and (candidate_idxs is None or len(candidate_idxs) == 0):
+        return []
+    
+    # 검색 대상 문서 인덱스 결정
+    search_idxs = candidate_idxs if candidate_idxs is not None else list(range(len(DOCS)))
+
+    # 2. 의미 기반 검색 (후보 문서에 대해서만 수행)
     q_emb = SEMB_MODEL.encode(
         [query],
         normalize_embeddings=True,
         convert_to_numpy=True
     )[0].astype("float32")
 
-    semantic_scores = np.dot(DOC_EMBEDS, q_emb)
+    # 후보 문서의 임베딩만 사용
+    candidate_embeds = DOC_EMBEDS[search_idxs]
+    semantic_scores_candidate = np.dot(candidate_embeds, q_emb)
     
-    # 정규화: 0-1 범위로 변환
-    semantic_min, semantic_max = semantic_scores.min(), semantic_scores.max()
+    # 전체 문서에 대한 점수 배열 생성
+    semantic_scores = np.full(len(DOCS), -1.0, dtype=np.float32)
+    for i, idx in enumerate(search_idxs):
+        semantic_scores[idx] = semantic_scores_candidate[i]
+    
+    # 정규화: 0-1 범위로 변환 (후보 문서만 고려)
+    valid_scores = semantic_scores[search_idxs]
+    semantic_min, semantic_max = valid_scores.min(), valid_scores.max()
     if semantic_max > semantic_min:
-        semantic_scores_normalized = (semantic_scores - semantic_min) / (semantic_max - semantic_min)
+        semantic_scores_normalized = np.full(len(DOCS), 0.0, dtype=np.float32)
+        for idx in search_idxs:
+            semantic_scores_normalized[idx] = (semantic_scores[idx] - semantic_min) / (semantic_max - semantic_min)
     else:
-        semantic_scores_normalized = semantic_scores * 0 + 0.5
+        semantic_scores_normalized = np.full(len(DOCS), 0.5, dtype=np.float32)
 
-    # 2. 키워드 매칭 점수 계산
-    keyword_scores = np.array([
-        compute_keyword_score(DOC_KEYWORDS[i], query)
-        for i in range(len(DOCS))
-    ])
+    # 3. 키워드 매칭 점수 계산 (후보 문서에 대해서만)
+    keyword_scores = np.zeros(len(DOCS), dtype=np.float32)
+    for idx in search_idxs:
+        keyword_scores[idx] = compute_keyword_score(DOC_KEYWORDS[idx], query)
 
-    # 3. 하이브리드 점수 결합
+    # 4. 하이브리드 점수 결합
     hybrid_scores = (1 - hybrid_weight) * semantic_scores_normalized + hybrid_weight * keyword_scores
     
-    # 4. 피드백 기반 점수 조정 적용
+    # 5. 피드백 기반 점수 조정 적용
     load_feedback_scores()  # 최신 피드백 반영
-    for idx in range(len(DOCS)):
+    for idx in search_idxs:
         if idx in FEEDBACK_SCORES:
             hybrid_scores[idx] += FEEDBACK_SCORES[idx]
             # 점수를 0-1 범위로 클리핑
             hybrid_scores[idx] = max(0.0, min(1.0, hybrid_scores[idx]))
 
-    # 키워드 필터 적용 (동의어 인식)
-    idxs = range(len(DOCS))
-
-    if filter_keyword:
-        filtered_idxs = []
-        filter_normalized = normalize_keyword(filter_keyword)
-        for i in idxs:
-            doc_kw_normalized = normalize_keyword(DOC_KEYWORDS[i])
-            if doc_kw_normalized == filter_normalized or are_synonyms(DOC_KEYWORDS[i], filter_keyword):
-                filtered_idxs.append(i)
-        idxs = filtered_idxs
-
-    # 해당 keyword 문서가 없는 경우
-    if filter_keyword and not idxs:
-        return []
-
-    # 상위 K 선택
-    sorted_idx = sorted(idxs, key=lambda i: -hybrid_scores[i])[:top_k]
+    # 6. 상위 K 선택 (후보 문서 중에서만)
+    sorted_idx = sorted(search_idxs, key=lambda i: -hybrid_scores[i])[:top_k]
 
     return [
         (DOCS[i], float(hybrid_scores[i]), DOC_KEYWORDS[i])
@@ -614,10 +698,9 @@ def generate_answer(
     ctx = "\n".join([f"- ({kw}) {text}" for text, _, kw in retrieved])
 
     system_prompt = (
-        "너는 반도체 ALD, 플라즈마, 유량, 압력, 챔버 등 ALD 개념을 설명하는 조수야.\n"
-        "반드시 한국어로만 답해야 해.\n"
-        "컨텍스트에 없는 내용을 추측하지 마.\n"
-        "만약 정보가 없으면 '해당 노트에 없는 내용입니다.'라고만 말해."
+        "반도체 ALD 전문가로서 답변하세요.\n"
+        "문서에 없는 내용은 '관련 정보가 부족합니다'라고 명시하세요.\n"
+        "반드시 한국어로만 답변해야 합니다."
     )
 
     user_prompt = f"""
