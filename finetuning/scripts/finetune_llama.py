@@ -165,6 +165,11 @@ def main():
         default=2e-4,
         help="학습률"
     )
+    parser.add_argument(
+        "--save_inference_only",
+        action="store_true",
+        help="추론용 모델만 저장 (optimizer 상태 제외, 체크포인트 optimizer 파일 삭제)"
+    )
     
     args = parser.parse_args()
     
@@ -211,6 +216,9 @@ def main():
     )
     
     # 학습 설정
+    # 추론용만 저장하는 경우 체크포인트에도 optimizer 저장 안 함
+    save_only_model = args.save_inference_only
+    
     training_args = TrainingArguments(
         output_dir=args.output_dir,
         num_train_epochs=args.num_epochs,
@@ -226,6 +234,7 @@ def main():
         save_total_limit=3,
         load_best_model_at_end=True,
         report_to="none",
+        save_only_model=save_only_model,  # True면 optimizer 상태 저장 안 함
     )
     
     # 데이터 콜레이터
@@ -248,11 +257,47 @@ def main():
     trainer.train()
     
     # 모델 저장
-    print(f"[+] 모델 저장 중: {args.output_dir}")
+    if args.save_inference_only:
+        # 추론용 모델만 저장 (가중치만, optimizer 상태 제외)
+        print(f"[+] 추론용 모델 저장 중: {args.output_dir}")
+        print("[!] optimizer 상태는 저장하지 않습니다 (추론에 불필요)")
+    else:
+        print(f"[+] 모델 저장 중: {args.output_dir}")
+    
+    # LoRA adapter 가중치만 저장 (optimizer 상태는 저장 안 함)
     trainer.save_model()
     tokenizer.save_pretrained(args.output_dir)
     
+    # 추론용만 저장하는 경우, 체크포인트 디렉토리의 optimizer 파일들 삭제
+    if args.save_inference_only:
+        print("[+] 체크포인트에서 optimizer 파일 정리 중...")
+        output_path = Path(args.output_dir)
+        deleted_count = 0
+        for checkpoint_dir in output_path.glob("checkpoint-*"):
+            if checkpoint_dir.is_dir():
+                # 추론에 불필요한 파일들
+                files_to_remove = [
+                    checkpoint_dir / "optimizer.pt",
+                    checkpoint_dir / "scheduler.pt",
+                    checkpoint_dir / "scaler.pt",
+                    checkpoint_dir / "rng_state.pth",
+                ]
+                
+                for file in files_to_remove:
+                    if file.exists():
+                        file.unlink()
+                        deleted_count += 1
+                        print(f"  - 삭제: {checkpoint_dir.name}/{file.name}")
+        
+        if deleted_count > 0:
+            print(f"[+] 총 {deleted_count}개의 optimizer 파일이 삭제되었습니다")
+        else:
+            print("[+] 삭제할 optimizer 파일이 없습니다 (이미 정리됨)")
+    
     print("[+] 완료!")
+    if args.save_inference_only:
+        print(f"[+] 추론용 모델이 저장되었습니다: {args.output_dir}")
+        print("[!] 추론에는 adapter 가중치만 필요합니다 (adapter_model.bin 또는 adapter_model.safetensors)")
 
 
 if __name__ == "__main__":

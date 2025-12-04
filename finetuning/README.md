@@ -55,6 +55,7 @@ python finetuning/scripts/prepare_finetuning_data.py
 
 #### 2단계: Fine-tuning 실행
 
+**기본 실행 (학습 재개 가능):**
 ```bash
 python finetuning/scripts/finetune_llama.py \
   --train_file finetuning/data/train.jsonl \
@@ -64,11 +65,25 @@ python finetuning/scripts/finetune_llama.py \
   --batch_size 4
 ```
 
+**추론용 모델만 저장 (권장, 파일 크기 최소화):**
+```bash
+python finetuning/scripts/finetune_llama.py \
+  --train_file finetuning/data/train.jsonl \
+  --eval_file finetuning/data/eval.jsonl \
+  --output_dir finetuning/models/qwen-ald-lora \
+  --num_epochs 3 \
+  --batch_size 4 \
+  --save_inference_only
+```
+
 **파라미터:**
 - `--model_name`: 기본 모델 (기본값: Qwen/Qwen2.5-7B-Instruct)
 - `--num_epochs`: 학습 에폭 수 (기본값: 3)
 - `--batch_size`: 배치 크기 (기본값: 4)
 - `--learning_rate`: 학습률 (기본값: 2e-4)
+- `--save_inference_only`: 추론용 모델만 저장 (optimizer 상태 제외, 체크포인트 optimizer 파일 삭제)
+  - 파일 크기 대폭 감소 (optimizer.pt는 ~77MB씩)
+  - 추론에는 모델 가중치만 필요하므로 이 옵션 사용 권장
 
 #### 3단계: Fine-tuned 모델 사용
 
@@ -94,12 +109,48 @@ pip install transformers datasets peft accelerate bitsandbytes
   - target_modules: q_proj, v_proj, k_proj, o_proj
   - dropout: 0.1
 
+## 💾 모델 저장 옵션
+
+### 추론용 모델 저장 (`--save_inference_only`)
+
+**추론용으로 사용할 경우 이 옵션을 사용하세요:**
+
+- ✅ **장점**:
+  - 파일 크기 대폭 감소 (optimizer.pt 파일 제거, 각각 ~77MB)
+  - GitHub 업로드 시 용량 절약
+  - 추론에 필요한 가중치만 저장 (adapter_model.bin 또는 adapter_model.safetensors)
+
+- ❌ **단점**:
+  - 학습 중단 후 재개 불가 (optimizer 상태 없음)
+  - 체크포인트에서 optimizer 파일들이 삭제됨
+
+**사용 예시:**
+```bash
+# 추론용 모델만 저장
+python finetuning/scripts/finetune_llama.py \
+  --save_inference_only \
+  --output_dir finetuning/models/qwen-ald-lora \
+  ...
+```
+
+**저장되는 파일:**
+- `adapter_model.bin` 또는 `adapter_model.safetensors` (LoRA 가중치)
+- `adapter_config.json` (LoRA 설정)
+- `tokenizer` 관련 파일들
+
+**저장되지 않는 파일:**
+- `optimizer.pt` (optimizer 상태)
+- `scheduler.pt` (scheduler 상태)
+- `scaler.pt` (mixed precision scaler)
+- `rng_state.pth` (랜덤 시드 상태)
+
 ## ⚠️ 주의사항
 
 - **GPU 권장**: 16GB VRAM 이상
 - **학습 시간**: 2-4시간 (데이터셋 크기 및 GPU 성능에 따라)
 - **메모리**: LoRA 사용으로 메모리 효율적 (전체 모델 Fine-tuning 대비)
 - **체크포인트**: 학습 중간 저장본은 `checkpoint-*/` 디렉토리에 저장됨
+- **추론용 저장**: 서비스 배포 시 `--save_inference_only` 옵션 사용 권장
 
 ## 📊 데이터 통계
 

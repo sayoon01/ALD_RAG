@@ -316,9 +316,11 @@ body {
 }
 
 .chat-layout .answer-content {
-  flex: 1;
-  min-height: 280px;
-  max-height: 320px;
+  flex: 1 1 0;
+  min-height: 200px;
+  max-height: 400px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* ============================================
@@ -366,6 +368,7 @@ body {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
+  flex-shrink: 0;
 }
 
 .panel-header h2 {
@@ -674,6 +677,7 @@ body {
   padding: 16px;
   border-top: 1px solid var(--border-subtle);
   margin-top: 12px;
+  flex-shrink: 0;
 }
 
 .feedback-label {

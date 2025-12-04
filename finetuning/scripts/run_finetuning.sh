@@ -24,13 +24,17 @@ fi
 echo ""
 echo "[2/3] Fine-tuning 실행 중..."
 echo "주의: GPU가 필요하며, 2-4시간이 소요될 수 있습니다."
+echo ""
+echo "추론용 모델만 저장하려면 --save_inference_only 옵션을 사용하세요."
+echo "  (optimizer 상태는 저장하지 않아 파일 크기가 작아집니다)"
 
 python3 finetuning/scripts/finetune_llama.py \
   --train_file "$PROJECT_DIR/finetuning/data/train.jsonl" \
   --eval_file "$PROJECT_DIR/finetuning/data/eval.jsonl" \
   --output_dir "$PROJECT_DIR/finetuning/models/ald-llama-lora" \
   --num_epochs 3 \
-  --batch_size 4
+  --batch_size 4 \
+  --save_inference_only
 
 if [ $? -ne 0 ]; then
     echo "[!] Fine-tuning 실패"
