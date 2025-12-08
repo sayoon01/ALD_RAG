@@ -31,7 +31,7 @@ echo "  (optimizer 상태는 저장하지 않아 파일 크기가 작아집니�
 python3 finetuning/scripts/finetune_llama.py \
   --train_file "$PROJECT_DIR/finetuning/data/train.jsonl" \
   --eval_file "$PROJECT_DIR/finetuning/data/eval.jsonl" \
-  --output_dir "$PROJECT_DIR/finetuning/models/ald-llama-lora" \
+  --output_dir "$PROJECT_DIR/finetuning/models/qwen-ald-lora" \
   --num_epochs 3 \
   --batch_size 4 \
   --save_inference_only
@@ -46,9 +46,9 @@ echo ""
 echo "[3/3] 완료!"
 echo ""
 echo "Fine-tuned 모델이 저장되었습니다:"
-echo "  $PROJECT_DIR/finetuning/models/ald-llama-lora"
+echo "  $PROJECT_DIR/finetuning/models/qwen-ald-lora"
 echo ""
 echo "사용 방법:"
 echo "  rag_core.py에서 다음 설정:"
-echo "    FINETUNED_MODEL_PATH = BASE_DIR / 'finetuning' / 'models' / 'ald-llama-lora'"
+echo "    FINETUNED_MODEL_PATH = BASE_DIR / 'finetuning' / 'models' / 'qwen-ald-lora'"
 
