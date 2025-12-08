@@ -398,34 +398,44 @@ async function sendQuestion() {
     const data = await res.json();
     setInfo(`✅ 응답 완료 (${elapsed}초)`, "success");
 
-    // 답변 표시 (신뢰도 점수 포함)
+    // 신뢰도 점수 표시 (헤더 옆에 작게)
+    const confidenceBadge = document.getElementById("confidence-badge");
+    const confidenceHelp = document.getElementById("confidence-help");
+    if (confidenceBadge) {
+      if (data.confidence !== null && data.confidence !== undefined) {
+        const confidencePercent = Math.round(data.confidence * 100);
+        let confidenceColor = "var(--danger)";
+        let confidenceLabel = "낮음";
+        
+        if (data.confidence >= 0.7) {
+          confidenceColor = "var(--success)";
+          confidenceLabel = "높음";
+        } else if (data.confidence >= 0.5) {
+          confidenceColor = "var(--warning)";
+          confidenceLabel = "보통";
+        }
+        
+        confidenceBadge.textContent = `신뢰도: ${confidenceLabel} (${confidencePercent}%)`;
+        confidenceBadge.style.color = confidenceColor;
+        confidenceBadge.style.borderLeft = `2px solid ${confidenceColor}`;
+        confidenceBadge.style.display = "inline-block";
+        
+        // 물음표 아이콘도 표시
+        if (confidenceHelp) {
+          confidenceHelp.style.display = "inline-block";
+        }
+      } else {
+        confidenceBadge.style.display = "none";
+        if (confidenceHelp) {
+          confidenceHelp.style.display = "none";
+        }
+      }
+    }
+
+    // 답변 표시
     if (els.answer) {
     if (data.answer) {
         let answerHtml = "";
-        
-        // 신뢰도 점수 표시
-        if (data.confidence !== null && data.confidence !== undefined) {
-          const confidencePercent = Math.round(data.confidence * 100);
-          let confidenceColor = "var(--danger)";
-          let confidenceLabel = "낮음";
-          
-          if (data.confidence >= 0.7) {
-            confidenceColor = "var(--success)";
-            confidenceLabel = "높음";
-          } else if (data.confidence >= 0.5) {
-            confidenceColor = "var(--warning)";
-            confidenceLabel = "보통";
-          }
-          
-          answerHtml += `
-            <div style="padding: 8px 12px; background: var(--bg-input); border-radius: var(--radius-md); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; border-left: 3px solid ${confidenceColor};">
-              <span style="font-size: 12px; color: var(--text-sub);">신뢰도:</span>
-              <span style="font-weight: 600; color: ${confidenceColor};">
-                ${confidenceLabel} (${confidencePercent}%)
-              </span>
-            </div>
-          `;
-        }
         
         if (context_only && data.answer.includes("컨텍스트만")) {
           answerHtml += `
@@ -707,6 +717,20 @@ els.clearBtn.addEventListener("click", () => {
   els.contextCount.textContent = "0 개";
       }
       
+      // 신뢰도 배지 및 물음표 아이콘 숨기기
+      const confidenceBadge = document.getElementById("confidence-badge");
+      const confidenceHelp = document.getElementById("confidence-help");
+      const confidenceTooltip = document.getElementById("confidence-tooltip");
+      if (confidenceBadge) {
+        confidenceBadge.style.display = "none";
+      }
+      if (confidenceHelp) {
+        confidenceHelp.style.display = "none";
+      }
+      if (confidenceTooltip) {
+        confidenceTooltip.style.display = "none";
+      }
+      
   setInfo("");
 });
   }
@@ -873,7 +897,7 @@ function initDocsAdd() {
       result.innerHTML = `<div class="docs-result error">연결 오류: ${err.message}</div>`;
     }
   });
-}
+} 
 
 // 문서 추출
 function initDocsExtract() {
@@ -1208,6 +1232,39 @@ async function submitFeedback(feedbackType) {
 
 // 피드백 초기화 함수
 function initFeedback() {
+  // 신뢰도 도움말 툴팁 기능
+  const confidenceHelp = document.getElementById("confidence-help");
+  const confidenceTooltip = document.getElementById("confidence-tooltip");
+  
+  if (confidenceHelp && confidenceTooltip) {
+    // 마우스 호버 시 툴팁 표시
+    confidenceHelp.addEventListener("mouseenter", () => {
+      confidenceTooltip.style.display = "block";
+    });
+    
+    confidenceHelp.addEventListener("mouseleave", () => {
+      confidenceTooltip.style.display = "none";
+    });
+    
+    // 툴팁 영역에서도 마우스가 벗어나면 숨김
+    confidenceTooltip.addEventListener("mouseenter", () => {
+      confidenceTooltip.style.display = "block";
+    });
+    
+    confidenceTooltip.addEventListener("mouseleave", () => {
+      confidenceTooltip.style.display = "none";
+    });
+    
+    // 물음표 아이콘 호버 효과
+    confidenceHelp.addEventListener("mouseenter", () => {
+      confidenceHelp.style.opacity = "1";
+    });
+    
+    confidenceHelp.addEventListener("mouseleave", () => {
+      confidenceHelp.style.opacity = "0.6";
+    });
+  }
+  
   if (els.feedbackLikeBtn) {
     els.feedbackLikeBtn.addEventListener("click", () => {
       submitFeedback("like");
@@ -1225,6 +1282,19 @@ function initFeedback() {
     els.clearBtn.addEventListener("click", () => {
       if (els.feedbackArea) {
         els.feedbackArea.style.display = "none";
+      }
+      // 신뢰도 배지 및 물음표 아이콘 숨기기
+      const confidenceBadge = document.getElementById("confidence-badge");
+      const confidenceHelp = document.getElementById("confidence-help");
+      const confidenceTooltip = document.getElementById("confidence-tooltip");
+      if (confidenceBadge) {
+        confidenceBadge.style.display = "none";
+      }
+      if (confidenceHelp) {
+        confidenceHelp.style.display = "none";
+      }
+      if (confidenceTooltip) {
+        confidenceTooltip.style.display = "none";
       }
       currentSession = {
         sessionId: null,

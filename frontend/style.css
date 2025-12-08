@@ -27,6 +27,35 @@
 }
 
 /* ============================================
+   신뢰도 도움말 툴팁 스타일
+   ============================================ */
+.confidence-help-icon {
+  cursor: help;
+  user-select: none;
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.confidence-help-icon:hover {
+  transform: scale(1.1);
+}
+
+.confidence-tooltip {
+  pointer-events: auto;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================
    기본 리셋 및 전역 스타일
    ============================================ */
 *,

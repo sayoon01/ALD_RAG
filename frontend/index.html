@@ -184,9 +184,31 @@
               <section class="panel panel-answer">
                 <div class="panel-header">
                   <h2>🤖 모델 답변</h2>
-                  <button id="clear-answer-btn" class="btn-ghost">
-                    <span>🗑️</span> 지우기
-                  </button>
+                  <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="display: flex; align-items: center; gap: 4px; position: relative;">
+                      <span id="confidence-badge" style="display: none; font-size: 11px; padding: 4px 8px; border-radius: 4px; background: var(--bg-input); color: var(--text-sub);"></span>
+                      <span id="confidence-help" class="confidence-help-icon" style="display: none; cursor: help; font-size: 12px; color: var(--text-sub); opacity: 0.6; transition: opacity 0.2s;" title="신뢰도 산정 방법">❓</span>
+                      <div id="confidence-tooltip" class="confidence-tooltip" style="display: none; position: absolute; bottom: 100%; left: 0; margin-bottom: 8px; padding: 12px; background: var(--bg-panel); border: 1px solid var(--border-subtle); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; min-width: 280px; max-width: 350px; font-size: 12px; line-height: 1.6; color: var(--text-main);">
+                        <div style="font-weight: 600; margin-bottom: 8px; color: var(--text-main);">📊 신뢰도 산정 방법</div>
+                        <div style="color: var(--text-sub);">
+                          검색된 문서들의 유사도 점수를 기반으로 계산됩니다:<br/>
+                          <br/>
+                          • <strong>최고 점수 70%</strong> + <strong>평균 점수 30%</strong><br/>
+                          <br/>
+                          <strong>신뢰도 기준:</strong><br/>
+                          • 높음 (70% 이상): 관련 문서가 잘 검색됨<br/>
+                          • 보통 (50-69%): 관련 문서가 일부 검색됨<br/>
+                          • 낮음 (50% 미만): 관련 문서가 부족함
+                        </div>
+                        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-subtle); font-size: 11px; color: var(--text-sub);">
+                          💡 낮은 신뢰도는 질문을 더 구체적으로 바꾸거나 문서를 보강하면 개선될 수 있습니다.
+                        </div>
+                      </div>
+                    </div>
+                    <button id="clear-answer-btn" class="btn-ghost">
+                      <span>🗑️</span> 지우기
+                    </button>
+                  </div>
                 </div>
                 <div id="answer" class="answer-content">
                   <div class="empty-state">

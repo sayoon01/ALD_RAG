@@ -13,16 +13,16 @@ if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
 try:
-    from datasets import load_dataset
-    from transformers import (
+    from datasets import load_dataset  # type: ignore
+    from transformers import (  # type: ignore
         AutoModelForCausalLM,
         AutoTokenizer,
         TrainingArguments,
         Trainer,
         DataCollatorForLanguageModeling
     )
-    from peft import LoraConfig, get_peft_model, TaskType
-    import torch
+    from peft import LoraConfig, get_peft_model, TaskType  # type: ignore
+    import torch  # type: ignore
     DEPENDENCIES_AVAILABLE = True
 except ImportError as e:
     print(f"[!] 필요한 패키지가 설치되지 않았습니다: {e}")
@@ -41,7 +41,7 @@ def load_jsonl(filepath: Path) -> List[Dict[str, str]]:
     return data
 
 
-def format_instruction(item: Dict[str, Any]) -> str:
+def format_instruction(item: Dict[str, Any], tokenizer) -> str:
     """Qwen2.5 Instruct 형식으로 프롬프트 변환"""
     # 새로운 형식 (messages 기반)
     if "messages" in item:
@@ -111,7 +111,7 @@ def prepare_dataset(train_file: Path, eval_file: Path, tokenizer):
                     "input": inputs[i] if i < len(inputs) else "",
                     "output": outputs[i] if i < len(outputs) else ""
                 }
-                prompt = format_instruction(item)
+                prompt = format_instruction(item, tokenizer)
                 prompts.append(prompt)
                 labels_list.append(item.get("output", ""))
         
@@ -157,7 +157,7 @@ def prepare_dataset(train_file: Path, eval_file: Path, tokenizer):
     print(f"[+] 검증 데이터: {len(eval_data)}개")
     
     # 데이터셋 생성
-    from datasets import Dataset
+    from datasets import Dataset  # type: ignore
     
     train_dataset = Dataset.from_list(train_data)
     eval_dataset = Dataset.from_list(eval_data)

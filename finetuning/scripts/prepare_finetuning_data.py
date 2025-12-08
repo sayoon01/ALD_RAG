@@ -20,7 +20,7 @@ DEVICE = None
 
 try:
     from rag_core import _init_models_if_needed
-    import torch
+    import torch  # type: ignore
     LLM_AVAILABLE = True
 except Exception as e:
     print(f"[!] LLM을 사용한 답변 생성은 비활성화됩니다: {e}")
@@ -770,7 +770,24 @@ def main():
     seen = set()
     unique_qa = []
     for qa in qa_pairs:
-        key = (qa["input"], qa["output"])
+        # messages 형식인지 확인
+        if "messages" in qa:
+            # messages 형식: 질문과 답변 추출
+            if len(qa["messages"]) >= 3:
+                user_content = qa["messages"][1].get("content", "")
+                assistant_content = qa["messages"][2].get("content", "")
+                # 질문 부분만 추출 (문맥 제외)
+                if "[질문]" in user_content:
+                    question = user_content.split("[질문]")[-1].strip().split("\n")[0]
+                else:
+                    question = user_content
+                key = (question, assistant_content)
+            else:
+                continue
+        else:
+            # 기존 형식 (input/output)
+            key = (qa.get("input", ""), qa.get("output", ""))
+        
         if key not in seen:
             seen.add(key)
             unique_qa.append(qa)

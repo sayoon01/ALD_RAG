@@ -17,9 +17,9 @@ if str(BASE_DIR) not in sys.path:
 # rag_core 함수들 로딩
 from rag_core import generate_answer, get_keyword_stats, reload_documents, load_feedback_scores
 
-from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi import FastAPI, UploadFile, File, Form  # type: ignore
+from fastapi.middleware.cors import CORSMiddleware  # type: ignore
+from pydantic import BaseModel  # type: ignore
 import json
 from datetime import datetime
 from typing import Optional
@@ -643,7 +643,7 @@ def docs_generate(
         if mode == "llm":
             # LLM 모드 (간단한 버전 - 실제로는 generate_with_llm 호출)
             from rag_core import _init_models_if_needed, TOKENIZER, LLM, DEVICE
-            import torch
+            import torch  # type: ignore
             
             _init_models_if_needed()
             
