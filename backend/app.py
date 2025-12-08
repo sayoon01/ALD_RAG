@@ -73,6 +73,8 @@ class ChatResponse(BaseModel):
     contexts: List[ContextItem]
     used_keyword: str
     session_id: Optional[str] = None  # 피드백 추적용 세션 ID
+    confidence: Optional[float] = None  # 답변 신뢰도 점수 (0.0 ~ 1.0)
+    related_questions: Optional[List[str]] = None  # 관련 질문 목록
 
 
 class FeedbackRequest(BaseModel):
@@ -137,7 +139,8 @@ def chat(req: ChatRequest):
     """
     try:
         # generate_answer 호출 (모든 파라미터 전달)
-        answer, retrieved = generate_answer(
+        # 반환값: (answer, retrieved, confidence, related_questions)
+        result = generate_answer(
             query=req.question,
             top_k=req.top_k,
             max_new_tokens=req.max_new_tokens,
@@ -145,6 +148,22 @@ def chat(req: ChatRequest):
             context_only=req.context_only,
             debug=req.debug
         )
+        
+        # 반환값 처리 (호환성 유지)
+        if len(result) == 4:
+            answer, retrieved, confidence, related_questions = result
+        elif len(result) == 3:
+            answer, retrieved, confidence = result
+            related_questions = []
+        elif len(result) == 2:
+            answer, retrieved = result
+            confidence = 0.0
+            related_questions = []
+        else:
+            answer = str(result[0]) if result else "오류 발생"
+            retrieved = []
+            confidence = 0.0
+            related_questions = []
     except Exception as e:
         # 모델 에러 / 파일 누락 등 상세한 에러 정보
         import traceback
@@ -160,12 +179,21 @@ def chat(req: ChatRequest):
     # retrieved 보호 — None이면 빈 리스트 처리
     retrieved = retrieved or []
 
-    # ContextItem 변환 (rag_core는 (text, score, keyword) tuple 반환)
+    # ContextItem 변환 (rag_core는 (text, score, keyword, doc_id) tuple 반환)
     context_items: List[ContextItem] = []
     for item in retrieved:
         try:
-            if isinstance(item, tuple) and len(item) >= 3:
-                text, score, keyword = item[0], item[1], item[2]
+            if isinstance(item, tuple):
+                if len(item) >= 4:
+                    # 새 형식: (text, score, keyword, doc_id)
+                    text, score, keyword, doc_id = item[0], item[1], item[2], item[3]
+                elif len(item) >= 3:
+                    # 기존 형식: (text, score, keyword)
+                    text, score, keyword = item[0], item[1], item[2]
+                else:
+                    text = str(item[0]) if len(item) > 0 else ""
+                    score = float(item[1]) if len(item) > 1 else 0.0
+                    keyword = ""
             elif isinstance(item, dict):
                 # dict 형태도 지원 (안전장치)
                 text = item.get("text", "")
@@ -205,7 +233,9 @@ def chat(req: ChatRequest):
         answer=answer or "답변이 생성되지 않았습니다.",
         contexts=context_items,
         used_keyword=used_keyword,
-        session_id=session_id
+        session_id=session_id,
+        confidence=confidence if 'confidence' in locals() else None,
+        related_questions=related_questions if 'related_questions' in locals() else []
     )
 
 

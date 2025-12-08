@@ -4,13 +4,26 @@
 import json
 import random
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import sys
 
 # 프로젝트 루트 경로 추가
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
+
+# LLM 기반 답변 생성을 위한 임포트 (선택적)
+LLM_AVAILABLE = False
+TOKENIZER = None
+LLM = None
+DEVICE = None
+
+try:
+    from rag_core import _init_models_if_needed
+    import torch
+    LLM_AVAILABLE = True
+except Exception as e:
+    print(f"[!] LLM을 사용한 답변 생성은 비활성화됩니다: {e}")
 
 DOCS_PATH = BASE_DIR / "docs" / "docs_ald.json"
 FEEDBACK_PATH = BASE_DIR / "feedback" / "feedback_data.json"
@@ -46,6 +59,91 @@ def load_feedback() -> List[Dict[str, Any]]:
         return data.get("feedbacks", [])
     except:
         return []
+
+
+def generate_llm_answer(question: str, contexts: List[tuple], use_llm: bool = False) -> Optional[str]:
+    """LLM을 사용하여 더 자연스러운 답변 생성"""
+    if not use_llm or not LLM_AVAILABLE:
+        return None
+    
+    try:
+        # rag_core에서 모델 가져오기
+        from rag_core import TOKENIZER as RAG_TOKENIZER, LLM as RAG_LLM, DEVICE as RAG_DEVICE
+        
+        if RAG_LLM is None or RAG_TOKENIZER is None:
+            return None
+        
+        # 컨텍스트 형식: (text, score, keyword, doc_id)
+        ctx_lines = []
+        for ctx in contexts:
+            if len(ctx) >= 3:
+                text, _, kw = ctx[0], ctx[1], ctx[2]
+                ctx_lines.append(f"- ({kw}) {text}")
+        
+        if not ctx_lines:
+            return None
+        
+        ctx = "\n".join(ctx_lines)
+        
+        # RAG와 동일한 프롬프트 형식
+        system_prompt = (
+            "반도체 ALD 전문가로서 답변하세요.\n"
+            "문서에 없는 내용은 '관련 정보가 부족합니다'라고 명시하세요.\n"
+            "반드시 한국어로만 답변해야 합니다."
+        )
+        
+        user_prompt = f"""아래는 관련 문맥이야:
+
+{ctx}
+
+[질문]
+{question}
+
+위 문맥만 근거로 한국어로 답변해줘."""
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        full_prompt = RAG_TOKENIZER.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=False
+        )
+        
+        inputs = RAG_TOKENIZER(full_prompt, return_tensors="pt")
+        
+        # 디바이스 처리
+        if hasattr(RAG_LLM, "device"):
+            model_device = RAG_LLM.device
+        elif hasattr(RAG_LLM, "hf_device_map"):
+            first_param = next(RAG_LLM.parameters())
+            model_device = first_param.device
+        else:
+            model_device = RAG_DEVICE if RAG_DEVICE is not None else torch.device("cpu")
+        
+        inputs = {k: v.to(model_device) for k, v in inputs.items()}
+        
+        with torch.no_grad():
+            output_ids = RAG_LLM.generate(
+                **inputs,
+                max_new_tokens=256,
+                temperature=0.6,
+                top_p=0.9,
+                do_sample=True,
+                pad_token_id=RAG_TOKENIZER.eos_token_id
+            )
+        
+        gen_ids = output_ids[0][inputs["input_ids"].shape[1]:]
+        answer = RAG_TOKENIZER.decode(gen_ids, skip_special_tokens=True).strip()
+        
+        # 최소 길이 체크
+        if len(answer) < 20:
+            return None
+        
+        return answer
+    except Exception as e:
+        print(f"[!] LLM 답변 생성 실패: {e}")
+        return None
 
 
 def generate_natural_questions(text: str, keywords: List[str]) -> List[str]:
@@ -170,10 +268,40 @@ def create_enhanced_qa_pairs(docs: List[Dict[str, Any]]) -> List[Dict[str, str]]
         questions = generate_natural_questions(text, keywords)
         
         for question in questions:
+            # RAG 스타일 프롬프트 형식 (messages 기반)
+            # 컨텍스트 형식: (키워드) 텍스트
+            context_text = f"- ({keywords[0]}) {text}"
+            contexts = [(text, 0.8, keywords[0], None)]
+            
+            # 30% 확률로 LLM 기반 답변 생성
+            answer = text  # 기본값: 원본 텍스트
+            if LLM_AVAILABLE and random.random() < 0.3:
+                llm_answer = generate_llm_answer(question, contexts, use_llm=True)
+                if llm_answer:
+                    answer = llm_answer
+            
             qa_pairs.append({
-                "instruction": "반도체 ALD 전문가로서 답변하세요. 문서에 명시된 내용만 답변하고, 문서에 없는 내용은 추론하지 말고 반드시 '관련 정보가 부족합니다'라고 명시하세요. 반드시 한국어로 답변해야 합니다.",
-                "input": question,
-                "output": text
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "반도체 ALD 전문가로서 답변하세요.\n문서에 없는 내용은 '관련 정보가 부족합니다'라고 명시하세요.\n반드시 한국어로만 답변해야 합니다."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""아래는 관련 문맥이야:
+
+{context_text}
+
+[질문]
+{question}
+
+위 문맥만 근거로 한국어로 답변해줘."""
+                    },
+                    {
+                        "role": "assistant",
+                        "content": answer
+                    }
+                ]
             })
         
         # 키워드별로 관련 문서들을 결합한 더 긴 답변 생성 (30% 확률)
@@ -194,10 +322,40 @@ def create_enhanced_qa_pairs(docs: List[Dict[str, Any]]) -> List[Dict[str, str]]
                 ]
                 
                 for question in detailed_questions:
+                    # 여러 컨텍스트 결합
+                    context_lines = [f"- ({main_keyword}) {txt}" for txt in combined_texts]
+                    context_text = "\n".join(context_lines)
+                    contexts = [(txt, 0.8, main_keyword, None) for txt in combined_texts]
+                    
+                    # 30% 확률로 LLM 기반 답변 생성
+                    answer = combined_answer  # 기본값: 결합된 텍스트
+                    if LLM_AVAILABLE and random.random() < 0.3:
+                        llm_answer = generate_llm_answer(question, contexts, use_llm=True)
+                        if llm_answer:
+                            answer = llm_answer
+                    
                     qa_pairs.append({
-                        "instruction": "반도체 ALD 전문가로서 답변하세요. 문서에 명시된 내용만 답변하고, 문서에 없는 내용은 추론하지 말고 반드시 '관련 정보가 부족합니다'라고 명시하세요. 반드시 한국어로 답변해야 합니다.",
-                        "input": question,
-                        "output": combined_answer
+                        "messages": [
+                            {
+                                "role": "system",
+                                "content": "반도체 ALD 전문가로서 답변하세요.\n문서에 없는 내용은 '관련 정보가 부족합니다'라고 명시하세요.\n반드시 한국어로만 답변해야 합니다."
+                            },
+                            {
+                                "role": "user",
+                                "content": f"""아래는 관련 문맥이야:
+
+{context_text}
+
+[질문]
+{question}
+
+위 문맥만 근거로 한국어로 답변해줘."""
+                            },
+                            {
+                                "role": "assistant",
+                                "content": answer
+                            }
+                        ]
                     })
     
     return qa_pairs
@@ -245,10 +403,32 @@ def create_keyword_combination_qa_improved(docs: List[Dict[str, Any]]) -> List[D
                 ]
                 
                 for question in combo_questions[:2]:  # 각 조합당 2개 질문
+                    # 키워드 조합 컨텍스트
+                    context_lines = [f"- ({kw1}) {txt}" if kw1 in txt else f"- ({kw2}) {txt}" for txt in combined_texts[:3]]
+                    context_text = "\n".join(context_lines)
+                    
                     qa_pairs.append({
-                        "instruction": "반도체 ALD 전문가로서 답변하세요. 문서에 명시된 내용만 답변하고, 문서에 없는 내용은 추론하지 말고 반드시 '관련 정보가 부족합니다'라고 명시하세요. 반드시 한국어로 답변해야 합니다.",
-                        "input": question,
-                        "output": answer
+                        "messages": [
+                            {
+                                "role": "system",
+                                "content": "반도체 ALD 전문가로서 답변하세요.\n문서에 없는 내용은 '관련 정보가 부족합니다'라고 명시하세요.\n반드시 한국어로만 답변해야 합니다."
+                            },
+                            {
+                                "role": "user",
+                                "content": f"""아래는 관련 문맥이야:
+
+{context_text}
+
+[질문]
+{question}
+
+위 문맥만 근거로 한국어로 답변해줘."""
+                            },
+                            {
+                                "role": "assistant",
+                                "content": answer
+                            }
+                        ]
                     })
     
     return qa_pairs
@@ -296,10 +476,29 @@ def create_equipment_structure_qa(docs: List[Dict[str, Any]]) -> List[Dict[str, 
             "VG12는 어디에 위치하나요?",
         ]
         for q in vg12_questions:
+            context_text = "\n".join([f"- (VG12) {txt}" for txt in vg12_docs[:3]])
             qa_pairs.append({
-                "instruction": "반도체 ALD 전문가로서 답변하세요. 문서에 명시된 내용만 답변하고, 문서에 없는 내용은 추론하지 말고 반드시 '관련 정보가 부족합니다'라고 명시하세요. 반드시 한국어로 답변해야 합니다.",
-                "input": q,
-                "output": vg12_texts
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "반도체 ALD 전문가로서 답변하세요.\n문서에 없는 내용은 '관련 정보가 부족합니다'라고 명시하세요.\n반드시 한국어로만 답변해야 합니다."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""아래는 관련 문맥이야:
+
+{context_text}
+
+[질문]
+{q}
+
+위 문맥만 근거로 한국어로 답변해줘."""
+                    },
+                    {
+                        "role": "assistant",
+                        "content": vg12_texts
+                    }
+                ]
             })
     
     if vg13_docs:
@@ -313,10 +512,29 @@ def create_equipment_structure_qa(docs: List[Dict[str, Any]]) -> List[Dict[str, 
             "VG13는 어디에 위치하나요?",
         ]
         for q in vg13_questions:
+            context_text = "\n".join([f"- (VG13) {txt}" for txt in vg13_docs[:3]])
             qa_pairs.append({
-                "instruction": "반도체 ALD 전문가로서 답변하세요. 문서에 명시된 내용만 답변하고, 문서에 없는 내용은 추론하지 말고 반드시 '관련 정보가 부족합니다'라고 명시하세요. 반드시 한국어로 답변해야 합니다.",
-                "input": q,
-                "output": vg13_texts
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "반도체 ALD 전문가로서 답변하세요.\n문서에 없는 내용은 '관련 정보가 부족합니다'라고 명시하세요.\n반드시 한국어로만 답변해야 합니다."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""아래는 관련 문맥이야:
+
+{context_text}
+
+[질문]
+{q}
+
+위 문맥만 근거로 한국어로 답변해줘."""
+                    },
+                    {
+                        "role": "assistant",
+                        "content": vg13_texts
+                    }
+                ]
             })
     
     # 2. 장비 구조 및 연결 관계 질문
@@ -351,10 +569,31 @@ def create_equipment_structure_qa(docs: List[Dict[str, Any]]) -> List[Dict[str, 
             ]
             
             for q in structure_questions[:3]:  # 각 조합당 3개 질문
+                context_lines = [f"- ({kw1}) {txt}" if kw1 in txt else f"- ({kw2}) {txt}" for txt in combined_texts[:3]]
+                context_text = "\n".join(context_lines)
+                
                 qa_pairs.append({
-                    "instruction": "반도체 ALD 전문가로서 답변하세요. 문서에 명시된 내용만 답변하고, 문서에 없는 내용은 추론하지 말고 반드시 '관련 정보가 부족합니다'라고 명시하세요. 반드시 한국어로 답변해야 합니다.",
-                    "input": q,
-                    "output": answer
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "반도체 ALD 전문가로서 답변하세요.\n문서에 없는 내용은 '관련 정보가 부족합니다'라고 명시하세요.\n반드시 한국어로만 답변해야 합니다."
+                        },
+                        {
+                            "role": "user",
+                            "content": f"""아래는 관련 문맥이야:
+
+{context_text}
+
+[질문]
+{q}
+
+위 문맥만 근거로 한국어로 답변해줘."""
+                        },
+                        {
+                            "role": "assistant",
+                            "content": answer
+                        }
+                    ]
                 })
     
     # 3. 3개 이상 장비 구조 질문
@@ -381,10 +620,31 @@ def create_equipment_structure_qa(docs: List[Dict[str, Any]]) -> List[Dict[str, 
             ]
             
             for q in triple_questions[:2]:
+                context_lines = [f"- ({kw1}) {txt}" for txt in combined_texts[:3]]
+                context_text = "\n".join(context_lines)
+                
                 qa_pairs.append({
-                    "instruction": "반도체 ALD 전문가로서 답변하세요. 문서에 명시된 내용만 답변하고, 문서에 없는 내용은 추론하지 말고 반드시 '관련 정보가 부족합니다'라고 명시하세요. 반드시 한국어로 답변해야 합니다.",
-                    "input": q,
-                    "output": answer
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "반도체 ALD 전문가로서 답변하세요.\n문서에 없는 내용은 '관련 정보가 부족합니다'라고 명시하세요.\n반드시 한국어로만 답변해야 합니다."
+                        },
+                        {
+                            "role": "user",
+                            "content": f"""아래는 관련 문맥이야:
+
+{context_text}
+
+[질문]
+{q}
+
+위 문맥만 근거로 한국어로 답변해줘."""
+                        },
+                        {
+                            "role": "assistant",
+                            "content": answer
+                        }
+                    ]
                 })
     
     return qa_pairs
@@ -403,10 +663,36 @@ def create_feedback_based_qa(feedbacks: List[Dict[str, Any]], docs: List[Dict[st
         answer = fb.get("answer", "").strip()
         
         if question and answer and len(answer) > 20:  # 너무 짧은 답변 제외
+            # 피드백에서 컨텍스트 추출
+            contexts = fb.get("contexts", [])
+            if contexts:
+                context_lines = [f"- ({ctx.get('keyword', '')}) {ctx.get('text', '')}" for ctx in contexts]
+                context_text = "\n".join(context_lines)
+            else:
+                context_text = "- (일반) 관련 정보"
+            
             qa_pairs.append({
-                "instruction": "반도체 ALD 전문가로서 답변하세요. 문서에 명시된 내용만 답변하고, 문서에 없는 내용은 추론하지 말고 반드시 '관련 정보가 부족합니다'라고 명시하세요. 반드시 한국어로 답변해야 합니다.",
-                "input": question,
-                "output": answer
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "반도체 ALD 전문가로서 답변하세요.\n문서에 없는 내용은 '관련 정보가 부족합니다'라고 명시하세요.\n반드시 한국어로만 답변해야 합니다."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""아래는 관련 문맥이야:
+
+{context_text}
+
+[질문]
+{question}
+
+위 문맥만 근거로 한국어로 답변해줘."""
+                    },
+                    {
+                        "role": "assistant",
+                        "content": answer
+                    }
+                ]
             })
     
     return qa_pairs
@@ -425,6 +711,24 @@ def save_jsonl(data: List[Dict[str, str]], filepath: Path):
 
 def main():
     print("[+] 개선된 학습 데이터 생성 시작...")
+    
+    # LLM 초기화 (사용 가능한 경우)
+    global LLM_AVAILABLE
+    if LLM_AVAILABLE:
+        try:
+            print("[+] LLM 초기화 중... (답변 생성에 사용)")
+            _init_models_if_needed()
+            from rag_core import TOKENIZER as RAG_TOKENIZER, LLM as RAG_LLM
+            if RAG_LLM is not None and RAG_TOKENIZER is not None:
+                print("[+] LLM 기반 답변 생성 활성화 (30% 확률)")
+            else:
+                LLM_AVAILABLE = False
+                print("[!] LLM 로드 실패, 단순 텍스트 결합 방식 사용")
+        except Exception as e:
+            LLM_AVAILABLE = False
+            print(f"[!] LLM 초기화 실패: {e}, 단순 텍스트 결합 방식 사용")
+    else:
+        print("[!] LLM 사용 불가, 단순 텍스트 결합 방식 사용")
     
     # 문서 로드
     docs = load_docs()
@@ -476,7 +780,14 @@ def main():
     # 질문 패턴 분석
     question_patterns = {}
     for qa in unique_qa[:100]:  # 샘플 100개
-        q = qa["input"]
+        # messages 형식인지 확인
+        if "messages" in qa:
+            q = qa["messages"][1]["content"] if len(qa["messages"]) > 1 else ""
+            # 질문 부분만 추출
+            if "[질문]" in q:
+                q = q.split("[질문]")[-1].strip().split("\n")[0]
+        else:
+            q = qa.get("input", "")
         if "는 무엇인가요?" in q or "은 무엇인가요?" in q:
             pattern = "X는 무엇인가요?"
         elif "의 역할은" in q:
@@ -511,7 +822,18 @@ def main():
     print(f"[+] 완료!")
     print(f"  - 학습 데이터: {len(train_data)}개")
     print(f"  - 검증 데이터: {len(eval_data)}개")
-    print(f"  - 평균 답변 길이: {sum(len(qa['output']) for qa in unique_qa) / len(unique_qa):.1f}자")
+    
+    # 평균 답변 길이 계산 (messages 형식 지원)
+    answer_lengths = []
+    for qa in unique_qa:
+        if "messages" in qa:
+            if len(qa["messages"]) > 2:
+                answer_lengths.append(len(qa["messages"][2]["content"]))
+        else:
+            answer_lengths.append(len(qa.get("output", "")))
+    
+    if answer_lengths:
+        print(f"  - 평균 답변 길이: {sum(answer_lengths) / len(answer_lengths):.1f}자")
 
 
 if __name__ == "__main__":

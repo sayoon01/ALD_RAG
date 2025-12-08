@@ -2,8 +2,11 @@
 
 import json
 import os
+import hashlib
 from pathlib import Path
 from typing import List, Tuple, Dict, Any, Union, Optional
+from functools import lru_cache
+from collections import OrderedDict
 
 import numpy as np  # type: ignore
 import torch  # type: ignore
@@ -48,8 +51,10 @@ SYNONYM_MAP: Dict[str, str] = {}  # keyword -> normalized keyword
 # 피드백 기반 점수 조정 (문서 인덱스 -> 점수 보정값)
 FEEDBACK_SCORES: Dict[int, float] = {}  # 문서 인덱스 -> 점수 보정값 (양수: 보너스, 음수: 페널티)
 FEEDBACK_LAST_MODIFIED: float = 0.0  # 피드백 파일 마지막 수정 시간 (캐싱용)
-import os
-FEEDBACK_LAST_MODIFIED: float = 0.0  # 피드백 파일 마지막 수정 시간 (캐싱용)
+
+# 쿼리 결과 캐시 (LRU 캐시, 최대 100개)
+QUERY_CACHE: OrderedDict[str, Tuple[str, List[Tuple[str, float, str]], float]] = OrderedDict()
+MAX_CACHE_SIZE = 100
 
 
 # ==============================
@@ -502,11 +507,114 @@ def compute_keyword_score(doc_keyword: str, query: str) -> float:
     return 0.0
 
 
+def retrieve_with_mmr(
+    query: str,
+    top_k: int = 3,
+    filter_keyword: Optional[str] = None,
+    hybrid_weight: float = 0.3,
+    mmr_lambda: float = 0.5,  # MMR 파라미터 (0.0 = 다양성만, 1.0 = 관련성만)
+    use_mmr: bool = True
+):
+    """
+    MMR (Maximal Marginal Relevance) 기반 하이브리드 검색
+    검색 결과의 다양성을 보장하여 중복된 컨텍스트를 제거합니다.
+    
+    Args:
+        query: 검색 쿼리
+        top_k: 상위 K개 결과 반환
+        filter_keyword: 키워드 필터 (선택)
+        hybrid_weight: 키워드 점수 가중치 (0.0-1.0)
+        mmr_lambda: MMR 파라미터 (0.0-1.0), 높을수록 관련성 우선, 낮을수록 다양성 우선
+        use_mmr: MMR 사용 여부
+    """
+    _init_models_if_needed()
+    
+    if not use_mmr or top_k <= 1:
+        # MMR을 사용하지 않거나 top_k가 1 이하면 일반 검색
+        return retrieve(query, top_k, filter_keyword, hybrid_weight)
+    
+    # 먼저 더 많은 후보를 검색 (top_k * 2)
+    candidate_k = min(top_k * 3, 20)  # 최대 20개 후보
+    candidates = retrieve(query, candidate_k, filter_keyword, hybrid_weight)
+    
+    if len(candidates) <= 1:
+        return candidates
+    
+    # 쿼리 임베딩
+    q_emb = SEMB_MODEL.encode(
+        [query],
+        normalize_embeddings=True,
+        convert_to_numpy=True
+    )[0].astype("float32")
+    
+    # 후보 문서 임베딩
+    candidate_embeds = []
+    candidate_items = []
+    for item in candidates:
+        text = item[0]
+        emb = SEMB_MODEL.encode(
+            [text],
+            normalize_embeddings=True,
+            convert_to_numpy=True
+        )[0].astype("float32")
+        candidate_embeds.append(emb)
+        candidate_items.append(item)
+    
+    candidate_embeds = np.array(candidate_embeds)
+    
+    # MMR 알고리즘
+    selected = []
+    selected_embeds = []
+    remaining = list(range(len(candidates)))
+    
+    # 첫 번째 문서: 가장 관련성 높은 것 선택
+    if remaining:
+        first_idx = 0  # 이미 관련성 순으로 정렬되어 있음
+        selected.append(first_idx)
+        selected_embeds.append(candidate_embeds[first_idx])
+        remaining.remove(first_idx)
+    
+    # 나머지 문서: MMR 점수로 선택
+    while len(selected) < top_k and remaining:
+        best_mmr_score = -float('inf')
+        best_idx = None
+        
+        for idx in remaining:
+            # 관련성 점수 (쿼리와의 유사도)
+            relevance = float(np.dot(candidate_embeds[idx], q_emb))
+            
+            # 다양성 점수 (이미 선택된 문서들과의 최대 유사도)
+            if selected_embeds:
+                similarities = [float(np.dot(candidate_embeds[idx], sel_emb)) for sel_emb in selected_embeds]
+                diversity = 1.0 - max(similarities)  # 최대 유사도가 낮을수록 다양성 높음
+            else:
+                diversity = 1.0
+            
+            # MMR 점수: 관련성과 다양성의 가중 평균
+            mmr_score = mmr_lambda * relevance - (1 - mmr_lambda) * diversity
+            
+            if mmr_score > best_mmr_score:
+                best_mmr_score = mmr_score
+                best_idx = idx
+        
+        if best_idx is not None:
+            selected.append(best_idx)
+            selected_embeds.append(candidate_embeds[best_idx])
+            remaining.remove(best_idx)
+        else:
+            break
+    
+    # 선택된 문서 반환 (원래 순서 유지)
+    return [candidate_items[i] for i in selected]
+
+
 def retrieve(
     query: str,
     top_k: int = 3,
     filter_keyword: Optional[str] = None,
     hybrid_weight: float = 0.3,  # 키워드 점수 가중치 (0.0 = 의미 검색만, 1.0 = 키워드 검색만)
+    use_mmr: bool = False,  # MMR 사용 여부
+    mmr_lambda: float = 0.5,  # MMR 파라미터
 ):
     """
     하이브리드 검색: 키워드 매칭 + 의미 기반 검색 (해시 테이블 최적화)
@@ -516,7 +624,11 @@ def retrieve(
         top_k: 상위 K개 결과 반환
         filter_keyword: 키워드 필터 (선택)
         hybrid_weight: 키워드 점수 가중치 (0.0-1.0)
+        use_mmr: MMR 사용 여부 (기본: False)
+        mmr_lambda: MMR 파라미터 (0.0-1.0)
     """
+    if use_mmr:
+        return retrieve_with_mmr(query, top_k, filter_keyword, hybrid_weight, mmr_lambda, True)
     _init_models_if_needed()
 
     # 1. 해시 테이블을 사용한 키워드 기반 후보 문서 필터링 (O(1) 조회)
@@ -623,7 +735,12 @@ def retrieve(
     sorted_idx = sorted(search_idxs, key=lambda i: -hybrid_scores[i])[:top_k]
 
     return [
-        (DOCS[i], float(hybrid_scores[i]), DOC_KEYWORDS[i])
+        (
+            DOCS[i], 
+            float(hybrid_scores[i]), 
+            DOC_KEYWORDS[i],
+            DOC_ITEMS[i].get("id") if i < len(DOC_ITEMS) else None  # 문서 ID 추가
+        )
         for i in sorted_idx
     ]
 
@@ -636,15 +753,131 @@ def debug_retrieval(query: str, retrieved):
         print("  (검색 결과 없음)")
         return
 
-    scores = [s for _, s, _ in retrieved]
+    scores = [s for _, s, _, _ in retrieved] if len(retrieved) > 0 and len(retrieved[0]) == 4 else [s for _, s, _ in retrieved]
     print(f"  * score range: min={min(scores):.3f}, max={max(scores):.3f}")
 
-    for text, score, keyword in retrieved:
-        print(f"    - [{keyword}] score={score:.3f} | {text}")
+    for item in retrieved:
+        if len(item) == 4:
+            text, score, keyword, doc_id = item
+            print(f"    - [ID:{doc_id}][{keyword}] score={score:.3f} | {text}")
+        else:
+            text, score, keyword = item
+            print(f"    - [{keyword}] score={score:.3f} | {text}")
 
 
 # ==============================
-# 5) LLaMA 기반 RAG 생성
+# 5) 쿼리 캐싱 유틸리티
+# ==============================
+
+def _get_cache_key(query: str, top_k: int, filter_keyword: Optional[str]) -> str:
+    """쿼리 캐시 키 생성"""
+    key_str = f"{query}|{top_k}|{filter_keyword or ''}"
+    return hashlib.md5(key_str.encode('utf-8')).hexdigest()
+
+
+def _get_from_cache(cache_key: str) -> Optional[Tuple[str, List[Tuple[str, float, str, Optional[int]]], float, List[str]]]:
+    """캐시에서 결과 가져오기"""
+    if cache_key in QUERY_CACHE:
+        # LRU: 사용된 항목을 맨 뒤로 이동
+        result = QUERY_CACHE.pop(cache_key)
+        QUERY_CACHE[cache_key] = result
+        # 호환성을 위해 관련 질문이 없으면 빈 리스트 추가
+        if len(result) == 3:
+            return (*result, [])
+        return result
+    return None
+
+
+def _save_to_cache(cache_key: str, answer: str, retrieved: List, confidence: float, related_questions: List[str] = None):
+    """캐시에 결과 저장"""
+    # 캐시 크기 제한
+    if len(QUERY_CACHE) >= MAX_CACHE_SIZE:
+        # 가장 오래된 항목 제거 (FIFO)
+        QUERY_CACHE.popitem(last=False)
+    
+    QUERY_CACHE[cache_key] = (answer, retrieved, confidence, related_questions or [])
+
+
+def calculate_confidence_score(retrieved: List) -> float:
+    """검색 결과 기반 신뢰도 점수 계산 (0.0 ~ 1.0)"""
+    if not retrieved:
+        return 0.0
+    
+    # retrieved는 (text, score, keyword, doc_id) 튜플 리스트
+    scores = []
+    for item in retrieved:
+        if len(item) >= 2:
+            scores.append(item[1])  # score
+    
+    if not scores:
+        return 0.0
+    
+    # 평균 점수와 최고 점수를 고려
+    avg_score = sum(scores) / len(scores)
+    max_score = max(scores)
+    
+    # 가중 평균: 최고 점수 70%, 평균 점수 30%
+    confidence = 0.7 * max_score + 0.3 * avg_score
+    
+    # 점수를 0.0 ~ 1.0 범위로 정규화 (이미 0~1 범위일 가능성이 높지만 안전장치)
+    return min(1.0, max(0.0, confidence))
+
+
+def generate_related_questions(query: str, retrieved: List, max_questions: int = 3) -> List[str]:
+    """검색 결과 기반으로 관련 질문 생성"""
+    if not retrieved or len(retrieved) == 0:
+        return []
+    
+    # 검색된 키워드 수집
+    keywords = set()
+    for item in retrieved:
+        if len(item) >= 3:
+            keywords.add(item[2])  # keyword
+    
+    if not keywords:
+        return []
+    
+    # 키워드 조합 기반 질문 템플릿
+    keyword_list = list(keywords)[:5]  # 최대 5개 키워드만 사용
+    
+    # 간단한 질문 템플릿 생성
+    questions = []
+    
+    # 단일 키워드 질문
+    for kw in keyword_list[:2]:
+        questions.append(f"{kw}는 무엇인가요?")
+        questions.append(f"{kw}에 대해 설명해주세요.")
+    
+    # 키워드 조합 질문
+    if len(keyword_list) >= 2:
+        questions.append(f"{keyword_list[0]}와 {keyword_list[1]}의 관계는 무엇인가요?")
+    
+    if len(keyword_list) >= 3:
+        questions.append(f"{keyword_list[0]}, {keyword_list[1]}, {keyword_list[2]}에 대해 알려주세요.")
+    
+    # 원본 질문과 유사한 패턴의 질문 생성
+    if "어떻게" in query or "방법" in query:
+        for kw in keyword_list[:2]:
+            questions.append(f"{kw}는 어떻게 사용하나요?")
+    elif "무엇" in query or "뭐" in query:
+        for kw in keyword_list[:2]:
+            questions.append(f"{kw}의 역할은 무엇인가요?")
+    
+    # 중복 제거 및 최대 개수 제한
+    unique_questions = []
+    seen = set()
+    for q in questions:
+        if q not in seen and q != query:
+            seen.add(q)
+            unique_questions.append(q)
+            if len(unique_questions) >= max_questions:
+                break
+    
+    return unique_questions
+
+
+# ==============================
+# 6) LLaMA 기반 RAG 생성 (개선된 버전)
 # ==============================
 
 def generate_answer(
@@ -654,6 +887,7 @@ def generate_answer(
     filter_keyword: Optional[str] = None,
     context_only: bool = False,
     debug: bool = False,
+    use_cache: bool = True,
 ):
 
     _init_models_if_needed()
@@ -662,11 +896,28 @@ def generate_answer(
     if LLM is None or TOKENIZER is None:
         return (
             "모델이 아직 로딩 중입니다. 잠시 후 다시 시도해주세요.",
-            []
+            [],
+            0.0,  # 신뢰도 점수
+            []  # 관련 질문
         )
 
-    # 검색 수행
-    retrieved = retrieve(query, top_k=top_k, filter_keyword=filter_keyword)
+    # 캐시 확인 (context_only 모드가 아니고 캐시 사용이 활성화된 경우)
+    cache_key = None
+    if use_cache and not context_only:
+        cache_key = _get_cache_key(query, top_k, filter_keyword)
+        cached_result = _get_from_cache(cache_key)
+        if cached_result is not None:
+            if len(cached_result) == 4:
+                answer, retrieved, confidence, related_questions = cached_result
+            else:
+                answer, retrieved, confidence = cached_result[:3]
+                related_questions = []
+            if debug:
+                print(f"[캐시 히트] 쿼리: {query[:50]}...")
+            return answer, retrieved, confidence, related_questions
+
+    # 검색 수행 (MMR 기본 활성화)
+    retrieved = retrieve(query, top_k=top_k, filter_keyword=filter_keyword, use_mmr=True, mmr_lambda=0.6)
 
     if debug:
         debug_retrieval(query, retrieved)
@@ -676,31 +927,50 @@ def generate_answer(
             "해당 질문과 일치하는 문맥을 찾지 못했어.\n"
             "→ filter_keyword가 너무 좁거나\n"
             "→ docs_ald.json에 관련 문장이 부족할 수 있어.",
+            [],
+            0.0,
             []
         )
 
-    scores = [s for _, s, _ in retrieved]
-    max_score = max(scores)
+    # retrieved는 (text, score, keyword, doc_id) 튜플 리스트
+    scores = [item[1] for item in retrieved if len(item) >= 2]
+    max_score = max(scores) if scores else 0.0
 
     # 안전장치
     if max_score < 0.45:  
+        confidence = calculate_confidence_score(retrieved)
+        related_questions = generate_related_questions(query, retrieved, max_questions=3)
         return (
             "문맥과의 연관성이 너무 낮아서 답변을 생성하지 않았어.\n"
             "문서를 보강하거나 질문을 더 구체적으로 바꿔줘!",
-            retrieved
+            retrieved,
+            confidence,
+            related_questions
         )
 
     # context만 반환 모드
     if context_only:
-        return "컨텍스트만 반환했어.", retrieved
+        confidence = calculate_confidence_score(retrieved)
+        related_questions = generate_related_questions(query, retrieved, max_questions=3)
+        return "컨텍스트만 반환했어.", retrieved, confidence, related_questions
 
-    # LLM 프롬프트 구성
-    ctx = "\n".join([f"- ({kw}) {text}" for text, _, kw in retrieved])
+    # LLM 프롬프트 구성 (문서 ID 포함)
+    ctx_parts = []
+    for item in retrieved:
+        if len(item) == 4:
+            text, score, kw, doc_id = item
+            doc_id_str = f"[문서 ID: {doc_id}]" if doc_id else ""
+            ctx_parts.append(f"- {doc_id_str} ({kw}) {text}")
+        else:
+            text, score, kw = item[:3]
+            ctx_parts.append(f"- ({kw}) {text}")
+    ctx = "\n".join(ctx_parts)
 
     system_prompt = (
         "반도체 ALD 전문가로서 답변하세요.\n"
         "문서에 없는 내용은 '관련 정보가 부족합니다'라고 명시하세요.\n"
-        "반드시 한국어로만 답변해야 합니다."
+        "반드시 한국어로만 답변해야 합니다.\n"
+        "답변 마지막에 참조한 문서 ID를 [참조: 문서 ID1, 문서 ID2, ...] 형식으로 표시하세요."
     )
 
     user_prompt = f"""
@@ -753,6 +1023,22 @@ def generate_answer(
         )
 
     gen_ids = output_ids[0][inputs["input_ids"].shape[1]:]
-    answer = TOKENIZER.decode(gen_ids, skip_special_tokens=True)
+    answer = TOKENIZER.decode(gen_ids, skip_special_tokens=True).strip()
+    
+    # 답변에 소스 인용 추가 (LLM이 추가하지 않은 경우)
+    doc_ids = [item[3] for item in retrieved if len(item) == 4 and item[3] is not None]
+    if doc_ids and "[참조:" not in answer and "[문서 ID:" not in answer:
+        unique_doc_ids = sorted(set(doc_ids))
+        answer += f"\n\n[참조: 문서 ID {', '.join(map(str, unique_doc_ids))}]"
+    
+    # 신뢰도 점수 계산
+    confidence = calculate_confidence_score(retrieved)
+    
+    # 관련 질문 생성
+    related_questions = generate_related_questions(query, retrieved, max_questions=3)
+    
+    # 캐시에 저장
+    if cache_key is not None:
+        _save_to_cache(cache_key, answer, retrieved, confidence, related_questions)
 
-    return answer.strip(), retrieved
+    return answer, retrieved, confidence, related_questions

@@ -12,7 +12,15 @@ huggingface/
 *.safetensors
 *.bin
 
+# 로그 파일
+logs/
+*.log
+
 # 에디터/OS 관련
 .DS_Store
 .idea/
 .vscode/
+
+# 백업 파일
+*.backup
+*.backup2

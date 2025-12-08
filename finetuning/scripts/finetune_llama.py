@@ -41,13 +41,25 @@ def load_jsonl(filepath: Path) -> List[Dict[str, str]]:
     return data
 
 
-def format_instruction(item: Dict[str, str]) -> str:
-    """Instruction 형식을 프롬프트로 변환"""
+def format_instruction(item: Dict[str, Any]) -> str:
+    """Qwen2.5 Instruct 형식으로 프롬프트 변환"""
+    # 새로운 형식 (messages 기반)
+    if "messages" in item:
+        messages = item["messages"]
+        # chat template 적용
+        return tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=False
+        )
+    
+    # 기존 형식 (하위 호환성)
     instruction = item.get("instruction", "")
     input_text = item.get("input", "")
     output = item.get("output", "")
     
-    prompt = f"""### Instruction:
+    if instruction and input_text and output:
+        prompt = f"""### Instruction:
 {instruction}
 
 ### Input:
@@ -55,40 +67,85 @@ def format_instruction(item: Dict[str, str]) -> str:
 
 ### Response:
 {output}"""
+        return prompt
     
-    return prompt
+    return ""
 
 
 def prepare_dataset(train_file: Path, eval_file: Path, tokenizer):
     """데이터셋 준비"""
     
     def tokenize_function(examples):
-        # batched=True일 때 examples는 딕셔너리 형태 (각 키의 값이 리스트)
-        instructions = examples.get("instruction", [])
-        inputs = examples.get("input", [])
-        outputs = examples.get("output", [])
-        
-        # Instruction 형식을 프롬프트로 변환
+        # 새로운 형식 (messages 기반) 또는 기존 형식 지원
         prompts = []
-        for i in range(len(instructions)):
-            item = {
-                "instruction": instructions[i] if i < len(instructions) else "",
-                "input": inputs[i] if i < len(inputs) else "",
-                "output": outputs[i] if i < len(outputs) else ""
-            }
-            prompts.append(format_instruction(item))
+        labels_list = []
+        
+        # messages 형식인지 확인
+        if "messages" in examples:
+            messages_list = examples["messages"]
+            for messages in messages_list:
+                # 전체 대화를 프롬프트로 변환
+                full_prompt = tokenizer.apply_chat_template(
+                    messages,
+                    tokenize=False,
+                    add_generation_prompt=False
+                )
+                prompts.append(full_prompt)
+                
+                # assistant 응답만 추출하여 labels 생성
+                assistant_msg = None
+                for msg in messages:
+                    if msg.get("role") == "assistant":
+                        assistant_msg = msg.get("content", "")
+                        break
+                labels_list.append(assistant_msg if assistant_msg else "")
+        else:
+            # 기존 형식 (하위 호환성)
+            instructions = examples.get("instruction", [])
+            inputs = examples.get("input", [])
+            outputs = examples.get("output", [])
+            
+            for i in range(max(len(instructions), len(inputs), len(outputs))):
+                item = {
+                    "instruction": instructions[i] if i < len(instructions) else "",
+                    "input": inputs[i] if i < len(inputs) else "",
+                    "output": outputs[i] if i < len(outputs) else ""
+                }
+                prompt = format_instruction(item)
+                prompts.append(prompt)
+                labels_list.append(item.get("output", ""))
         
         # 토크나이징
         tokenized = tokenizer(
             prompts,
             truncation=True,
-            max_length=512,
+            max_length=1024,  # 더 긴 컨텍스트를 위해 증가
             padding="max_length",
             return_tensors="pt"
         )
         
-        # Labels는 input_ids와 동일 (언어 모델링)
-        tokenized["labels"] = tokenized["input_ids"].clone()
+        # Labels 생성: assistant 응답 부분만 학습 대상
+        if "messages" in examples:
+            # assistant 응답을 토크나이징하여 labels 생성
+            labels = []
+            for label_text in labels_list:
+                if label_text:
+                    label_tokens = tokenizer(
+                        label_text,
+                        truncation=True,
+                        max_length=512,
+                        add_special_tokens=False
+                    )["input_ids"]
+                    # 패딩 추가
+                    label_tokens = label_tokens + [tokenizer.pad_token_id] * (512 - len(label_tokens))
+                    labels.append(label_tokens[:512])
+                else:
+                    labels.append([tokenizer.pad_token_id] * 512)
+            
+            tokenized["labels"] = torch.tensor(labels)
+        else:
+            # 기존 방식: input_ids와 동일
+            tokenized["labels"] = tokenized["input_ids"].clone()
         
         return tokenized
     
@@ -150,7 +207,7 @@ def main():
     parser.add_argument(
         "--num_epochs",
         type=int,
-        default=3,
+        default=5,
         help="학습 에폭 수"
     )
     parser.add_argument(
@@ -162,7 +219,7 @@ def main():
     parser.add_argument(
         "--learning_rate",
         type=float,
-        default=2e-4,
+        default=1e-4,
         help="학습률"
     )
     parser.add_argument(
@@ -198,10 +255,10 @@ def main():
     print("[+] LoRA 설정 중...")
     lora_config = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
-        r=16,  # rank
+        r=32,  # rank (16 → 32로 증가)
         lora_alpha=32,
-        target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],
-        lora_dropout=0.1,
+        target_modules=["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        lora_dropout=0.05,  # 0.1 → 0.05로 조정
     )
     
     model = get_peft_model(model, lora_config)
@@ -226,6 +283,8 @@ def main():
         per_device_eval_batch_size=args.batch_size,
         gradient_accumulation_steps=4,
         learning_rate=args.learning_rate,
+        warmup_steps=100,  # 워밍업 추가
+        weight_decay=0.01,  # 정규화 추가
         fp16=torch.cuda.is_available(),
         logging_steps=10,
         eval_steps=50,

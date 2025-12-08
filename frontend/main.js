@@ -398,11 +398,37 @@ async function sendQuestion() {
     const data = await res.json();
     setInfo(`✅ 응답 완료 (${elapsed}초)`, "success");
 
-    // 답변 표시
+    // 답변 표시 (신뢰도 점수 포함)
     if (els.answer) {
     if (data.answer) {
+        let answerHtml = "";
+        
+        // 신뢰도 점수 표시
+        if (data.confidence !== null && data.confidence !== undefined) {
+          const confidencePercent = Math.round(data.confidence * 100);
+          let confidenceColor = "var(--danger)";
+          let confidenceLabel = "낮음";
+          
+          if (data.confidence >= 0.7) {
+            confidenceColor = "var(--success)";
+            confidenceLabel = "높음";
+          } else if (data.confidence >= 0.5) {
+            confidenceColor = "var(--warning)";
+            confidenceLabel = "보통";
+          }
+          
+          answerHtml += `
+            <div style="padding: 8px 12px; background: var(--bg-input); border-radius: var(--radius-md); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; border-left: 3px solid ${confidenceColor};">
+              <span style="font-size: 12px; color: var(--text-sub);">신뢰도:</span>
+              <span style="font-weight: 600; color: ${confidenceColor};">
+                ${confidenceLabel} (${confidencePercent}%)
+              </span>
+            </div>
+          `;
+        }
+        
         if (context_only && data.answer.includes("컨텍스트만")) {
-          els.answer.innerHTML = `
+          answerHtml += `
             <div style="padding: 12px; background: var(--accent-soft); border-radius: var(--radius-md); margin-bottom: 12px;">
               <strong>ℹ️ 컨텍스트 전용 모드</strong><br/>
               답변은 생성되지 않았습니다. 아래 컨텍스트를 확인하세요.
@@ -410,8 +436,10 @@ async function sendQuestion() {
             <div style="white-space: pre-wrap;">${data.answer}</div>
           `;
         } else {
-      els.answer.textContent = data.answer;
+          answerHtml += `<div style="white-space: pre-wrap;">${data.answer}</div>`;
         }
+        
+        els.answer.innerHTML = answerHtml;
     } else {
         els.answer.innerHTML = `
           <div class="empty-state">
@@ -424,6 +452,9 @@ async function sendQuestion() {
 
     // 컨텍스트 표시
     renderContexts(data.contexts || [], data.used_keyword || null);
+    
+    // 관련 질문 표시
+    renderRelatedQuestions(data.related_questions || []);
     
     // 질문 히스토리에 추가
     addToHistory(question, data.answer || "", data.contexts || []);
@@ -552,6 +583,66 @@ function renderContexts(contexts, usedKeyword = null) {
   });
 
   els.contexts.appendChild(list);
+}
+
+// 관련 질문 표시
+function renderRelatedQuestions(questions) {
+  const container = document.getElementById("related-questions");
+  if (!container) return;
+  
+  if (!questions || questions.length === 0) {
+    container.style.display = "none";
+    return;
+  }
+  
+  container.style.display = "block";
+  container.innerHTML = "";
+  
+  const title = document.createElement("div");
+  title.style.cssText = "font-weight: 600; color: var(--text-main); margin-bottom: 8px; font-size: 14px;";
+  title.textContent = "💡 관련 질문:";
+  container.appendChild(title);
+  
+  const list = document.createElement("div");
+  list.style.cssText = "display: flex; flex-direction: column; gap: 6px;";
+  
+  questions.forEach((q) => {
+    const btn = document.createElement("button");
+    btn.className = "related-question-btn";
+    btn.textContent = q;
+    btn.style.cssText = `
+      padding: 8px 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      text-align: left;
+      cursor: pointer;
+      transition: var(--transition);
+      font-size: 13px;
+      color: var(--text-main);
+    `;
+    
+    btn.addEventListener("mouseenter", () => {
+      btn.style.background = "var(--accent-soft)";
+      btn.style.borderColor = "var(--accent)";
+    });
+    
+    btn.addEventListener("mouseleave", () => {
+      btn.style.background = "var(--bg-input)";
+      btn.style.borderColor = "var(--border-subtle)";
+    });
+    
+    btn.addEventListener("click", () => {
+      if (els.question) {
+        els.question.value = q;
+        sendQuestion();
+      }
+    });
+    
+    list.appendChild(btn);
+  });
+  
+  container.appendChild(list);
 }
 
 // ============================================
